@@ -2,7 +2,7 @@
  * Registred singleton on AMP doc.
  * @enum {number}
  */
-export const AMPDOC_SINGLETON_NAME = {
+export const AMPDOC_SINGLETON_NAME_ENUM = {
   TRACKING_IFRAME: 1,
   LINKER: 2,
 };
@@ -11,13 +11,9 @@ export const AMPDOC_SINGLETON_NAME = {
  * Enum for tick labels (used by Performance service)
  * @enum {string}
  */
-export const TickLabel = {
+export const TickLabel_Enum = {
   ACCESS_AUTHORIZATION: 'aaa',
   ACCESS_AUTHORIZATION_VISIBLE: 'aaav',
-  ADS_LAYOUT_DELAY: 'adld',
-  BAD_FRAMES: 'bf',
-  BATTERY_DROP: 'bd',
-  CONTENT_LAYOUT_DELAY: 'cld',
   CUMULATIVE_LAYOUT_SHIFT: 'cls',
   // The enum union of all source types contributing to the CLS
   CUMULATIVE_LAYOUT_SHIFT_TYPE_UNION: 'clstu',
@@ -30,12 +26,11 @@ export const TickLabel = {
   FIRST_PAINT: 'fp',
   FIRST_INPUT_DELAY: 'fid',
   FIRST_VIEWPORT_READY: 'pc',
-  GOOD_FRAME_PROBABILITY: 'gfp',
   INSTALL_STYLES: 'is',
+  INTERACTION_TO_NEXT_PAINT: 'inp',
   LARGEST_CONTENTFUL_PAINT: 'lcp',
   LARGEST_CONTENTFUL_PAINT_TYPE: 'lcpt',
   LARGEST_CONTENTFUL_PAINT_VISIBLE: 'lcpv',
-  LONG_TASKS_CHILD: 'ltc',
   LONG_TASKS_SELF: 'lts',
   MAKE_BODY_VISIBLE: 'mbv',
   MESSAGING_READY: 'msr',

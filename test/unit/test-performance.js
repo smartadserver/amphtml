@@ -1,11 +1,14 @@
 import * as fakeTimers from '@sinonjs/fake-timers';
 
-import {VisibilityState} from '#core/constants/visibility-state';
+import {VisibilityState_Enum} from '#core/constants/visibility-state';
+import {base64UrlDecodeToBytes} from '#core/types/string/base64';
+
+import {toggleExperiment} from '#experiments';
 
 import {Services} from '#service';
 import {installRuntimeServices} from '#service/core-services';
 import {
-  ELEMENT_TYPE,
+  ELEMENT_TYPE_ENUM,
   Performance,
   installPerformanceService,
 } from '#service/performance-impl';
@@ -35,6 +38,7 @@ describes.realWin('performance', {amp: true}, (env) => {
   beforeEach(() => {
     win = env.win;
     ampdoc = env.ampdoc;
+    toggleExperiment(win, 'interaction-to-next-paint', true);
     clock = fakeTimers.withGlobal(win).install({
       toFake: ['Date', 'setTimeout', 'clearTimeout'],
       // set initial Date.now to 100, so that we can differentiate between time relative to epoch and relative to process start (value vs. delta).
@@ -151,370 +155,371 @@ describes.realWin('performance', {amp: true}, (env) => {
     });
   });
 
-  describe
-    .configure()
-    .skipFirefox()
-    .run('when viewer is ready,', () => {
-      let viewer;
-      let viewerSendMessageStub;
+  describe('when viewer is ready,', () => {
+    let viewer;
+    let viewerSendMessageStub;
 
-      beforeEach(() => {
-        viewer = Services.viewerForDoc(ampdoc);
-        viewerSendMessageStub = env.sandbox.stub(viewer, 'sendMessage');
-      });
+    beforeEach(() => {
+      viewer = Services.viewerForDoc(ampdoc);
+      viewerSendMessageStub = env.sandbox.stub(viewer, 'sendMessage');
+    });
 
-      describe('config', () => {
-        it(
-          'should configure correctly when viewer is embedded and supports ' +
-            'csi',
-          () => {
-            env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns('1');
-            env.sandbox.stub(viewer, 'isEmbedded').returns(true);
-            perf.coreServicesAvailable().then(() => {
-              expect(perf.isPerformanceTrackingOn()).to.be.true;
-            });
-          }
-        );
+    describe('config', () => {
+      it(
+        'should configure correctly when viewer is embedded and supports ' +
+          'csi',
+        () => {
+          env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns('1');
+          env.sandbox.stub(viewer, 'isEmbedded').returns(true);
+          perf.coreServicesAvailable().then(() => {
+            expect(perf.isPerformanceTrackingOn()).to.be.true;
+          });
+        }
+      );
 
-        it(
-          'should configure correctly when viewer is embedded and does ' +
-            'NOT support csi',
-          () => {
-            env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns('0');
-            env.sandbox.stub(viewer, 'isEmbedded').returns(true);
-            perf.coreServicesAvailable().then(() => {
-              expect(perf.isPerformanceTrackingOn()).to.be.false;
-            });
-          }
-        );
-
-        it(
-          'should configure correctly when viewer is embedded and does ' +
-            'NOT support csi',
-          () => {
-            env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
-            env.sandbox.stub(viewer, 'isEmbedded').returns(true);
-            perf.coreServicesAvailable().then(() => {
-              expect(perf.isPerformanceTrackingOn()).to.be.false;
-            });
-          }
-        );
-
-        it('should configure correctly when viewer is not embedded', () => {
-          env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
-          env.sandbox.stub(viewer, 'isEmbedded').returns(false);
+      it(
+        'should configure correctly when viewer is embedded and does ' +
+          'NOT support csi',
+        () => {
+          env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns('0');
+          env.sandbox.stub(viewer, 'isEmbedded').returns(true);
           perf.coreServicesAvailable().then(() => {
             expect(perf.isPerformanceTrackingOn()).to.be.false;
           });
-        });
-      });
+        }
+      );
 
-      describe('channel established', () => {
-        it('should flush events when channel is ready', () => {
+      it(
+        'should configure correctly when viewer is embedded and does ' +
+          'NOT support csi',
+        () => {
           env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
-          env.sandbox
-            .stub(viewer, 'whenMessagingReady')
-            .returns(Promise.resolve());
-          expect(perf.isMessagingReady_).to.be.false;
-          const promise = perf.coreServicesAvailable();
-          expect(perf.events_.length).to.equal(0);
-
-          perf.tick('start');
-          expect(perf.events_.length).to.equal(1);
-
-          perf.tick('startEnd');
-          expect(perf.events_.length).to.equal(2);
-          expect(perf.isMessagingReady_).to.be.false;
-
-          const flushSpy = env.sandbox.spy(perf, 'flush');
-          expect(flushSpy).to.have.callCount(0);
-          perf.flush();
-          expect(flushSpy).to.have.callCount(1);
-          expect(perf.events_.length).to.equal(2);
-
-          perf.isPerformanceTrackingOn_ = true;
-          clock.tick(1);
-          return promise.then(() => {
-            expect(perf.isMessagingReady_).to.be.true;
-            const msrCalls = viewerSendMessageStub.withArgs(
-              'tick',
-              env.sandbox.match((arg) => arg.label === 'msr')
-            );
-            expect(msrCalls).to.be.calledOnce;
-            expect(msrCalls.args[0][1]).to.be.jsonEqual({
-              label: 'msr',
-              delta: 1,
-            });
-
-            const timeOriginCall = viewerSendMessageStub.withArgs(
-              'tick',
-              env.sandbox.match((arg) => arg.label === 'timeOrigin')
-            );
-            expect(timeOriginCall).to.be.calledOnce;
-            expect(timeOriginCall).calledWithMatch('tick', {
-              label: 'timeOrigin',
-              value: 100,
-            });
-
-            expect(flushSpy).to.have.callCount(5);
-            expect(perf.events_.length).to.equal(0);
-          });
-        });
-      });
-
-      describe('channel not established', () => {
-        it('should not flush anything', () => {
-          env.sandbox.stub(viewer, 'whenMessagingReady').returns(null);
-          expect(perf.isMessagingReady_).to.be.false;
-
-          expect(perf.events_.length).to.equal(0);
-
-          perf.tick('start');
-          expect(perf.events_.length).to.equal(1);
-
-          perf.tick('startEnd');
-          expect(perf.events_.length).to.equal(2);
-          expect(perf.isMessagingReady_).to.be.false;
-
-          const flushSpy = env.sandbox.spy(perf, 'flush');
-          expect(flushSpy).to.have.callCount(0);
-          perf.flush();
-          expect(flushSpy).to.have.callCount(1);
-          expect(perf.events_.length).to.equal(2);
-
-          return Promise.all([
-            perf.coreServicesAvailable(),
-            ampdoc.whenFirstVisible(),
-          ]).then(() => {
-            expect(flushSpy).to.have.callCount(4);
-            expect(perf.isMessagingReady_).to.be.false;
-            const count = 5;
-            expect(perf.events_.length).to.equal(count);
-          });
-        });
-      });
-
-      describe('tickSinceVisible', () => {
-        let tickDeltaStub;
-        let firstVisibleTime;
-
-        beforeEach(() => {
-          tickDeltaStub = env.sandbox.stub(perf, 'tickDelta');
-          firstVisibleTime = null;
-          env.sandbox
-            .stub(ampdoc, 'getFirstVisibleTime')
-            .callsFake(() => firstVisibleTime);
-          perf.coreServicesAvailable();
-          perf.viewer_ = {isEmbedded: () => true};
-        });
-
-        it('should not offset by visible time when viewer is not set', () => {
-          perf.viewer_ = {isEmbedded: () => false};
-          clock.tick(10);
-          perf.tickSinceVisible('test');
-
-          expect(tickDeltaStub).to.have.been.calledOnce;
-          expect(tickDeltaStub.firstCall.args[1]).to.equal(10);
-        });
-
-        it('should always be zero before visible', () => {
-          clock.tick(10);
-          perf.tickSinceVisible('test');
-
-          expect(tickDeltaStub).to.have.been.calledOnce;
-          expect(tickDeltaStub.firstCall.args[1]).to.equal(0);
-        });
-
-        it('should calculate after visible', () => {
-          firstVisibleTime = timeOrigin + 5;
-
-          clock.tick(10);
-          perf.tickSinceVisible('test');
-
-          expect(tickDeltaStub).to.have.been.calledOnce;
-          expect(tickDeltaStub.firstCall.args[1]).to.equal(5);
-        });
-
-        it('should be zero after visible but for earlier event', () => {
-          firstVisibleTime = timeOrigin + 5;
-
-          // An earlier event, since event time (4) is less than visible time (5).
-          clock.tick(4);
-          perf.tickSinceVisible('test');
-
-          expect(tickDeltaStub).to.have.been.calledOnce;
-          expect(tickDeltaStub.firstCall.args[1]).to.equal(0);
-        });
-      });
-
-      describe('and performanceTracking is off', () => {
-        beforeEach(() => {
-          env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
-          env.sandbox.stub(viewer, 'isEmbedded').returns(false);
-        });
-
-        it('should not forward queued ticks', () => {
-          perf.tick('start0');
-          clock.tick(1);
-          perf.tick('start1', 'start0');
-
-          expect(perf.events_.length).to.equal(2);
-
-          return perf.coreServicesAvailable().then(() => {
-            perf.flushQueuedTicks_();
-            perf.flush();
-            expect(perf.events_.length).to.equal(0);
-
-            expect(viewerSendMessageStub.withArgs('tick')).to.not.be.called;
-            expect(
-              viewerSendMessageStub.withArgs(
-                'sendCsi',
-                undefined,
-                /* cancelUnsent */ true
-              )
-            ).to.not.be.called;
-          });
-        });
-
-        it('should ignore all calls to tick', () => {
-          perf.tick('start0');
-          return perf.coreServicesAvailable().then(() => {
-            expect(viewerSendMessageStub.withArgs('tick')).to.not.be.called;
-          });
-        });
-
-        it('should ignore all calls to flush', () => {
-          perf.tick('start0');
-          perf.flush();
-          return perf.coreServicesAvailable().then(() => {
-            expect(
-              viewerSendMessageStub.withArgs(
-                'sendCsi',
-                undefined,
-                /* cancelUnsent */ true
-              )
-            ).to.not.be.called;
-          });
-        });
-      });
-
-      describe('and performanceTracking is on', () => {
-        beforeEach(() => {
-          env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns('1');
           env.sandbox.stub(viewer, 'isEmbedded').returns(true);
-          env.sandbox
-            .stub(viewer, 'whenMessagingReady')
-            .returns(Promise.resolve());
-        });
-
-        it('should forward all queued tick events', () => {
-          perf.tick('start0');
-          clock.tick(1);
-          perf.tick('start1');
-
-          expect(perf.events_.length).to.equal(2);
-
-          return perf.coreServicesAvailable().then(() => {
-            expect(
-              viewerSendMessageStub.withArgs('tick').getCall(0).args[1]
-            ).to.be.jsonEqual({
-              label: 'start0',
-              value: timeOrigin,
-            });
-            expect(
-              viewerSendMessageStub.withArgs('tick').getCall(1).args[1]
-            ).to.be.jsonEqual({
-              label: 'start1',
-              value: timeOrigin + 1,
-            });
-            expect(
-              viewerSendMessageStub.withArgs('tick').getCall(4).args[1]
-            ).to.be.jsonEqual({
-              label: 'msr',
-              delta: 1,
-            });
+          perf.coreServicesAvailable().then(() => {
+            expect(perf.isPerformanceTrackingOn()).to.be.false;
           });
-        });
+        }
+      );
 
-        it('should have no more queued tick events after flush', () => {
-          perf.tick('start0');
-          perf.tick('start1');
-
-          expect(perf.events_.length).to.equal(2);
-
-          return perf.coreServicesAvailable().then(() => {
-            expect(perf.events_.length).to.equal(0);
-          });
-        });
-
-        it('should forward tick events', () => {
-          return perf.coreServicesAvailable().then(() => {
-            clock.tick(100);
-            perf.tick('start0');
-            perf.tick('start1', 300);
-
-            expect(
-              viewerSendMessageStub.withArgs(
-                'tick',
-                env.sandbox.match((arg) => arg.label == 'start0')
-              ).args[0][1]
-            ).to.be.jsonEqual({
-              label: 'start0',
-              value: timeOrigin + 100,
-            });
-            expect(
-              viewerSendMessageStub.withArgs(
-                'tick',
-                env.sandbox.match((arg) => arg.label == 'start1')
-              ).args[0][1]
-            ).to.be.jsonEqual({
-              label: 'start1',
-              delta: 300,
-            });
-          });
-        });
-
-        it('should call the flush callback', () => {
-          // Make sure "first visible" arrives after "channel ready".
-          const firstVisiblePromise = new Promise(() => {});
-          env.sandbox
-            .stub(ampdoc, 'whenFirstVisible')
-            .returns(firstVisiblePromise);
-          expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
-            0
-          );
-          // coreServicesAvailable calls flush once.
-          return perf.coreServicesAvailable().then(() => {
-            expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
-              1
-            );
-            perf.flush();
-            expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
-              2
-            );
-            perf.flush();
-            expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
-              3
-            );
-          });
-        });
-
-        it('should flush with the story experiment enabled', () => {
-          const storyEl = win.document.createElement('amp-story');
-          const bodyEl = win.document.body;
-          bodyEl.insertBefore(storyEl, bodyEl.firstElementChild || null);
-
-          return perf.coreServicesAvailable().then(() => {
-            expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
-              1
-            );
-            const call = viewerSendMessageStub.withArgs('sendCsi').getCall(0);
-            expect(call.args[1]).to.have.property('ampexp');
-            expect(call.args[1].ampexp).to.contain('story');
-          });
+      it('should configure correctly when viewer is not embedded', () => {
+        env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
+        env.sandbox.stub(viewer, 'isEmbedded').returns(false);
+        perf.coreServicesAvailable().then(() => {
+          expect(perf.isPerformanceTrackingOn()).to.be.false;
         });
       });
     });
+
+    describe('channel established', () => {
+      it('should flush events when channel is ready', () => {
+        env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
+        env.sandbox
+          .stub(viewer, 'whenMessagingReady')
+          .returns(Promise.resolve());
+        expect(perf.isMessagingReady_).to.be.false;
+        const promise = perf.coreServicesAvailable();
+        expect(perf.events_.length).to.equal(0);
+
+        perf.tick('start');
+        expect(perf.events_.length).to.equal(1);
+
+        perf.tick('startEnd');
+        expect(perf.events_.length).to.equal(2);
+        expect(perf.isMessagingReady_).to.be.false;
+
+        const flushSpy = env.sandbox.spy(perf, 'flush');
+        expect(flushSpy).to.have.callCount(0);
+        perf.flush();
+        expect(flushSpy).to.have.callCount(1);
+        expect(perf.events_.length).to.equal(2);
+
+        perf.isPerformanceTrackingOn_ = true;
+        clock.tick(1);
+        return promise.then(() => {
+          expect(perf.isMessagingReady_).to.be.true;
+          const msrCalls = viewerSendMessageStub.withArgs(
+            'tick',
+            env.sandbox.match((arg) => arg.label === 'msr')
+          );
+          expect(msrCalls).to.be.calledOnce;
+          expect(msrCalls.args[0][1]).to.be.jsonEqual({
+            label: 'msr',
+            delta: 1,
+          });
+
+          const timeOriginCall = viewerSendMessageStub.withArgs(
+            'tick',
+            env.sandbox.match((arg) => arg.label === 'timeOrigin')
+          );
+          expect(timeOriginCall).to.be.calledOnce;
+          expect(timeOriginCall).calledWithMatch('tick', {
+            label: 'timeOrigin',
+            value: 100,
+          });
+
+          expect(flushSpy).to.have.callCount(6);
+          expect(perf.events_.length).to.equal(0);
+        });
+      });
+    });
+
+    describe('channel not established', () => {
+      it('should not flush anything', () => {
+        env.sandbox.stub(viewer, 'whenMessagingReady').returns(null);
+        expect(perf.isMessagingReady_).to.be.false;
+
+        expect(perf.events_.length).to.equal(0);
+
+        perf.tick('start');
+        expect(perf.events_.length).to.equal(1);
+
+        perf.tick('startEnd');
+        expect(perf.events_.length).to.equal(2);
+        expect(perf.isMessagingReady_).to.be.false;
+
+        const flushSpy = env.sandbox.spy(perf, 'flush');
+        expect(flushSpy).to.have.callCount(0);
+        perf.flush();
+        expect(flushSpy).to.have.callCount(1);
+        expect(perf.events_.length).to.equal(2);
+
+        return Promise.all([
+          perf.coreServicesAvailable(),
+          ampdoc.whenFirstVisible(),
+        ]).then(() => {
+          expect(flushSpy).to.have.callCount(5);
+          expect(perf.isMessagingReady_).to.be.false;
+          const count = 6;
+          expect(perf.events_.length).to.equal(count);
+        });
+      });
+    });
+
+    describe('tickSinceVisible', () => {
+      let tickDeltaStub;
+      let firstVisibleTime;
+
+      beforeEach(() => {
+        tickDeltaStub = env.sandbox.stub(perf, 'tickDelta');
+        firstVisibleTime = null;
+        env.sandbox
+          .stub(ampdoc, 'getFirstVisibleTime')
+          .callsFake(() => firstVisibleTime);
+        perf.coreServicesAvailable();
+        perf.viewer_ = {isEmbedded: () => true};
+      });
+
+      it('should not offset by visible time when viewer is not set', () => {
+        perf.viewer_ = {isEmbedded: () => false};
+        clock.tick(10);
+        perf.tickSinceVisible('test');
+
+        expect(tickDeltaStub).to.have.been.calledOnce;
+        expect(tickDeltaStub.firstCall.args[1]).to.equal(10);
+      });
+
+      it('should always be zero before visible', () => {
+        clock.tick(10);
+        perf.tickSinceVisible('test');
+
+        expect(tickDeltaStub).to.have.been.calledOnce;
+        expect(tickDeltaStub.firstCall.args[1]).to.equal(0);
+      });
+
+      it('should calculate after visible', () => {
+        firstVisibleTime = timeOrigin + 5;
+
+        clock.tick(10);
+        perf.tickSinceVisible('test');
+
+        expect(tickDeltaStub).to.have.been.calledOnce;
+        expect(tickDeltaStub.firstCall.args[1]).to.equal(5);
+      });
+
+      it('should be zero after visible but for earlier event', () => {
+        firstVisibleTime = timeOrigin + 5;
+
+        // An earlier event, since event time (4) is less than visible time (5).
+        clock.tick(4);
+        perf.tickSinceVisible('test');
+
+        expect(tickDeltaStub).to.have.been.calledOnce;
+        expect(tickDeltaStub.firstCall.args[1]).to.equal(0);
+      });
+    });
+
+    describe('and performanceTracking is off', () => {
+      beforeEach(() => {
+        env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns(null);
+        env.sandbox.stub(viewer, 'isEmbedded').returns(false);
+      });
+
+      it('should not forward queued ticks', () => {
+        perf.tick('start0');
+        clock.tick(1);
+        perf.tick('start1', 'start0');
+
+        expect(perf.events_.length).to.equal(2);
+
+        return perf.coreServicesAvailable().then(() => {
+          perf.flushQueuedTicks_();
+          perf.flush();
+          expect(perf.events_.length).to.equal(0);
+
+          expect(viewerSendMessageStub.withArgs('tick')).to.not.be.called;
+          expect(
+            viewerSendMessageStub.withArgs(
+              'sendCsi',
+              undefined,
+              /* cancelUnsent */ true
+            )
+          ).to.not.be.called;
+        });
+      });
+
+      it('should ignore all calls to tick', () => {
+        perf.tick('start0');
+        return perf.coreServicesAvailable().then(() => {
+          expect(viewerSendMessageStub.withArgs('tick')).to.not.be.called;
+        });
+      });
+
+      it('should ignore all calls to flush', () => {
+        perf.tick('start0');
+        perf.flush();
+        return perf.coreServicesAvailable().then(() => {
+          expect(
+            viewerSendMessageStub.withArgs(
+              'sendCsi',
+              undefined,
+              /* cancelUnsent */ true
+            )
+          ).to.not.be.called;
+        });
+      });
+    });
+
+    describe('and performanceTracking is on', () => {
+      beforeEach(() => {
+        env.sandbox.stub(viewer, 'getParam').withArgs('csi').returns('1');
+        env.sandbox.stub(viewer, 'isEmbedded').returns(true);
+        env.sandbox
+          .stub(viewer, 'whenMessagingReady')
+          .returns(Promise.resolve());
+      });
+
+      it('should forward all queued tick events', () => {
+        perf.tick('start0');
+        clock.tick(1);
+        perf.tick('start1');
+
+        expect(perf.events_.length).to.equal(2);
+
+        return perf.coreServicesAvailable().then(() => {
+          expect(
+            viewerSendMessageStub.withArgs('tick').getCall(0).args[1]
+          ).to.be.jsonEqual({
+            label: 'start0',
+            value: timeOrigin,
+          });
+          expect(
+            viewerSendMessageStub.withArgs('tick').getCall(1).args[1]
+          ).to.be.jsonEqual({
+            label: 'start1',
+            value: timeOrigin + 1,
+          });
+          expect(
+            viewerSendMessageStub.withArgs('tick').getCall(4).args[1]
+          ).to.be.jsonEqual({
+            label: 'inp',
+            delta: 40,
+          });
+          expect(
+            viewerSendMessageStub.withArgs('tick').getCall(5).args[1]
+          ).to.be.jsonEqual({
+            label: 'msr',
+            delta: 1,
+          });
+        });
+      });
+
+      it('should have no more queued tick events after flush', () => {
+        perf.tick('start0');
+        perf.tick('start1');
+
+        expect(perf.events_.length).to.equal(2);
+
+        return perf.coreServicesAvailable().then(() => {
+          expect(perf.events_.length).to.equal(0);
+        });
+      });
+
+      it('should forward tick events', () => {
+        return perf.coreServicesAvailable().then(() => {
+          clock.tick(100);
+          perf.tick('start0');
+          perf.tick('start1', 300);
+
+          expect(
+            viewerSendMessageStub.withArgs(
+              'tick',
+              env.sandbox.match((arg) => arg.label == 'start0')
+            ).args[0][1]
+          ).to.be.jsonEqual({
+            label: 'start0',
+            value: timeOrigin + 100,
+          });
+          expect(
+            viewerSendMessageStub.withArgs(
+              'tick',
+              env.sandbox.match((arg) => arg.label == 'start1')
+            ).args[0][1]
+          ).to.be.jsonEqual({
+            label: 'start1',
+            delta: 300,
+          });
+        });
+      });
+
+      it('should call the flush callback', () => {
+        // Make sure "first visible" arrives after "channel ready".
+        const firstVisiblePromise = new Promise(() => {});
+        env.sandbox
+          .stub(ampdoc, 'whenFirstVisible')
+          .returns(firstVisiblePromise);
+        expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(0);
+        // coreServicesAvailable calls flush once.
+        return perf.coreServicesAvailable().then(() => {
+          expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
+            1
+          );
+          perf.flush();
+          expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
+            2
+          );
+          perf.flush();
+          expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
+            3
+          );
+        });
+      });
+
+      it('should flush with the story experiment enabled', () => {
+        const storyEl = win.document.createElement('amp-story');
+        const bodyEl = win.document.body;
+        bodyEl.insertBefore(storyEl, bodyEl.firstElementChild || null);
+
+        return perf.coreServicesAvailable().then(() => {
+          expect(viewerSendMessageStub.withArgs('sendCsi')).to.have.callCount(
+            1
+          );
+          const call = viewerSendMessageStub.withArgs('sendCsi').getCall(0);
+          expect(call.args[1]).to.have.property('ampexp');
+          expect(call.args[1].ampexp).to.contain('story');
+        });
+      });
+    });
+  });
 
   it('should wait for visible resources', () => {
     const resources = Services.resourcesForDoc(ampdoc);
@@ -876,8 +881,8 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
 
   async function toggleVisibility(perf, on) {
     viewerVisibilityState = on
-      ? VisibilityState.VISIBLE
-      : VisibilityState.HIDDEN;
+      ? VisibilityState_Enum.VISIBLE
+      : VisibilityState_Enum.HIDDEN;
     perf.onAmpDocVisibilityChange_();
   }
 
@@ -1041,7 +1046,11 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
       toggleVisibility(perf, false);
 
       const lcpEvents = perf.events_.filter(({label}) => label === 'lcp');
-      expect(lcpEvents.length).to.equal(1);
+      expect(lcpEvents.length).to.equal(2);
+      expect(lcpEvents).deep.include({
+        label: 'lcp',
+        delta: 12,
+      });
       expect(lcpEvents).deep.include({
         label: 'lcp',
         delta: 23,
@@ -1095,16 +1104,37 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
       // Flush LCP again.
       toggleVisibility(perf, false);
 
+      // A textual paragraph
+      const p = document.createElement('p');
+      p.textContent = 'hello';
+      performanceObserver.triggerCallback({
+        getEntries() {
+          return [
+            {
+              entryType: 'largest-contentful-paint',
+              startTime: 25,
+              element: p,
+            },
+          ];
+        },
+      });
+      // Flush LCP again.
+      toggleVisibility(perf, false);
+
       const lcptEvents = perf.events_.filter(({label}) =>
         label.startsWith('lcpt')
       );
       expect(lcptEvents).deep.include({
         label: 'lcpt',
-        delta: ELEMENT_TYPE.image,
+        delta: ELEMENT_TYPE_ENUM.image,
       });
       expect(lcptEvents).deep.include({
         label: 'lcpt',
-        delta: ELEMENT_TYPE.carousel,
+        delta: ELEMENT_TYPE_ENUM.carousel,
+      });
+      expect(lcptEvents).deep.include({
+        label: 'lcpt',
+        delta: ELEMENT_TYPE_ENUM.text,
       });
     });
   });
@@ -1167,6 +1197,22 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
       return Services.performanceFor(env.win);
     }
 
+    it('should not throw when layout-shift occurs before core services available', () => {
+      // Fake the Performance API.
+      env.win.PerformanceObserver.supportedEntryTypes = ['layout-shift'];
+      const perf = getPerformance();
+
+      // Fake layout-shift that occured before core services registered
+      performanceObserver.triggerCallback({
+        getEntries() {
+          return [
+            {entryType: 'layout-shift', value: 0.3, hadRecentInput: false},
+          ];
+        },
+      });
+      perf.coreServicesAvailable();
+    });
+
     it('when the viewer visibility changes to inactive', () => {
       // Specify an Android Chrome user agent.
       env.sandbox
@@ -1210,7 +1256,7 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
         },
       });
 
-      viewerVisibilityState = VisibilityState.INACTIVE;
+      viewerVisibilityState = VisibilityState_Enum.INACTIVE;
       perf.onAmpDocVisibilityChange_();
 
       const clsEvents = perf.events_.filter((evt) =>
@@ -1331,6 +1377,140 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
     });
   });
 
+  describe('forwards INP metrics', () => {
+    let PerformanceObserverConstructorStub, performanceObserver;
+    beforeEach(() => {
+      toggleExperiment(env.win, 'interaction-to-next-paint', true);
+
+      // Stub and fake the PerformanceObserver constructor.
+      const PerformanceObserverStub = env.sandbox.stub();
+      PerformanceObserverStub.callsFake((callback) => {
+        performanceObserver = new PerformanceObserverImpl(callback);
+        return performanceObserver;
+      });
+      PerformanceObserverConstructorStub = env.sandbox.stub(
+        env.win,
+        'PerformanceObserver'
+      );
+      PerformanceObserverConstructorStub.callsFake(PerformanceObserverStub);
+    });
+
+    it('after performance service registered', () => {
+      // Pretend that the Navigation API exists.
+      PerformanceObserverConstructorStub.supportedEntryTypes = ['event'];
+
+      installPerformanceService(env.win);
+
+      const perf = Services.performanceFor(env.win);
+      perf.ampdoc_ = env.ampdoc;
+      perf.registerPerformanceObserver_();
+
+      // Fake interaction events.
+      perf.tickInteractionToNextPaint_(38);
+
+      expect(perf.events_.length).to.equal(1);
+      expect(perf.events_).to.be.jsonEqual([
+        {
+          label: 'inp',
+          delta: 38,
+        },
+      ]);
+
+      perf.tickInteractionToNextPaint_(380);
+      expect(perf.events_.length).to.equal(2);
+      expect(perf.events_).to.be.jsonEqual([
+        {
+          label: 'inp',
+          delta: 38,
+        },
+        {
+          label: 'inp',
+          delta: 380 - 38,
+        },
+      ]);
+
+      perf.tickInteractionToNextPaint_(30);
+      expect(perf.events_.length).to.equal(2);
+      expect(perf.events_).to.be.jsonEqual([
+        {
+          label: 'inp',
+          delta: 38,
+        },
+        {
+          label: 'inp',
+          delta: 380 - 38,
+        },
+      ]);
+    });
+  });
+
+  describe('forwards INP metrics', () => {
+    let PerformanceObserverConstructorStub, performanceObserver;
+    beforeEach(() => {
+      // Stub and fake the PerformanceObserver constructor.
+      toggleExperiment(env.win, 'interaction-to-next-paint', true);
+
+      const PerformanceObserverStub = env.sandbox.stub();
+      PerformanceObserverStub.callsFake((callback) => {
+        performanceObserver = new PerformanceObserverImpl(callback);
+        return performanceObserver;
+      });
+      PerformanceObserverConstructorStub = env.sandbox.stub(
+        env.win,
+        'PerformanceObserver'
+      );
+      PerformanceObserverConstructorStub.callsFake(PerformanceObserverStub);
+    });
+
+    it('after performance service registered', () => {
+      // Pretend that the Navigation API exists.
+      PerformanceObserverConstructorStub.supportedEntryTypes = ['event'];
+
+      installPerformanceService(env.win);
+
+      const perf = Services.performanceFor(env.win);
+      perf.ampdoc_ = env.ampdoc;
+      perf.registerPerformanceObserver_();
+
+      // Fake interaction events.
+      perf.tickInteractionToNextPaint_(38);
+
+      expect(perf.events_.length).to.equal(1);
+      expect(perf.events_).to.be.jsonEqual([
+        {
+          label: 'inp',
+          delta: 38,
+        },
+      ]);
+
+      perf.tickInteractionToNextPaint_(380);
+      expect(perf.events_.length).to.equal(2);
+      expect(perf.events_).to.be.jsonEqual([
+        {
+          label: 'inp',
+          delta: 38,
+        },
+        {
+          label: 'inp',
+          delta: 380 - 38,
+        },
+      ]);
+
+      perf.tickInteractionToNextPaint_(30);
+      expect(perf.events_.length).to.equal(2);
+      expect(perf.events_).to.be.jsonEqual([
+        {
+          label: 'inp',
+          delta: 38,
+        },
+        {
+          label: 'inp',
+          delta: 380 - 38,
+        },
+      ]);
+    });
+  });
+
   describe('inabox environment', () => {
     let PerformanceObserverConstructorStub;
 
@@ -1357,7 +1537,7 @@ describes.realWin('PeformanceObserver metrics', {amp: true}, (env) => {
   });
 });
 
-describes.realWin('log canonicalUrl', {amp: true}, (env) => {
+describes.realWin('log extraParams', {amp: true}, (env) => {
   let win;
   let perf;
   let viewerSendMessageStub;
@@ -1384,6 +1564,18 @@ describes.realWin('log canonicalUrl', {amp: true}, (env) => {
       expect(viewerSendMessageStub.lastCall.args[1].canonicalUrl).to.equal(
         canonicalUrl
       );
+    });
+  });
+
+  it('should add the random eventid to sendCsi', () => {
+    return perf.coreServicesAvailable().then(() => {
+      viewerSendMessageStub.reset();
+      perf.flush();
+      expect(viewerSendMessageStub.lastCall.args[0]).to.equal('sendCsi');
+      const {eventid} = viewerSendMessageStub.lastCall.args[1];
+      expect(() => {
+        base64UrlDecodeToBytes(eventid);
+      }).not.to.throw();
     });
   });
 });

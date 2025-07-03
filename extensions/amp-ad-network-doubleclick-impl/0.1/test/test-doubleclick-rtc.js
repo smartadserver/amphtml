@@ -69,7 +69,7 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
           rtcTime: 100,
         },
         {
-          response: {targeting: {'a': 'foo', 'b': {e: 'f'}}},
+          response: {targeting: {'a': 'foo', 'b': {e: 'f'}}, ppid: 'testId'},
           callout: 'www.exampleB.com',
           rtcTime: 500,
         },
@@ -90,6 +90,7 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
           'b': {c: 'd', e: 'f'},
           'z': [{a: 'b'}, {c: 'd'}],
         },
+        ppid: 'testId',
       };
       testMergeRtcResponses(
         rtcResponseArray,
@@ -323,6 +324,34 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
     it('should return null for empty array', () => {
       expect(impl.mergeRtcResponses_()).to.be.null;
     });
+
+    it('should properly merge ppid', () => {
+      const rtcResponseArray = [
+        {
+          response: {ppid: 'testId1'},
+          callout: 'www.exampleA.com',
+          rtcTime: 100,
+        },
+        {
+          response: {ppid: 'testId2'},
+          callout: 'www.exampleB.com',
+          rtcTime: 500,
+        },
+      ];
+      const expectedParams = {
+        ati: '2,2',
+        artc: '100,500',
+        ard: 'www.exampleA.com,www.exampleB.com',
+      };
+      const expectedJsonTargeting = {
+        ppid: 'testId2',
+      };
+      testMergeRtcResponses(
+        rtcResponseArray,
+        expectedParams,
+        expectedJsonTargeting
+      );
+    });
   });
 
   describe('rewriteRtcKeys', () => {
@@ -363,8 +392,7 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
   });
 
   describe('getCustomRealTimeConfigMacros', () => {
-    // TODO(bradfrizzell, #18574): Fix failing referrer check and re-enable.
-    it.skip('should return correct macros', () => {
+    it('should return correct macros', () => {
       const macros = {
         'data-slot': '5678',
         'height': '50',
@@ -390,18 +418,21 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
         'json': JSON.stringify(json),
       });
       env.win.document.body.appendChild(element);
-      env.sandbox.defineProperty(env.win.document, 'referrer', {
-        value: 'https://www.google.com/',
-      });
+      // TODO(bradfrizzell, #18574): Fix failing referrer check and re-enable.
+      //env.sandbox.defineProperty(env.win.document, 'referrer', {
+      //  value: 'https://www.google.com/',
+      //});
       const docInfo = Services.documentInfoForDoc(element);
       impl = new AmpAdNetworkDoubleclickImpl(
         element,
         env.win.document,
         env.win
       );
-      const docViewport = Services.viewportForDoc(this.getAmpDoc());
+      const docViewport = Services.viewportForDoc(impl.getAmpDoc());
       impl.populateAdUrlState();
-      const customMacros = impl.getCustomRealTimeConfigMacros_();
+      const customMacros = impl.getCustomRealTimeConfigMacros_(
+        /*hasStorageConsent=*/ true
+      );
       expect(customMacros.PAGEVIEWID()).to.equal(docInfo.pageViewId);
       expect(customMacros.PAGEVIEWID_64()).to.equal(docInfo.pageViewId64);
       expect(customMacros.HREF()).to.equal(env.win.location.href);
@@ -414,7 +445,7 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
         docViewport.getScrollHeight()
       );
       expect(customMacros.BKG_STATE()).to.equal(
-        this.getAmpDoc().isVisible() ? 'visible' : 'hidden'
+        impl.getAmpDoc().isVisible() ? 'visible' : 'hidden'
       );
       Object.keys(macros).forEach((macro) => {
         expect(customMacros.ATTR(macro)).to.equal(macros[macro]);
@@ -440,7 +471,9 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
         env.win
       );
       impl.populateAdUrlState();
-      const customMacros = impl.getCustomRealTimeConfigMacros_();
+      const customMacros = impl.getCustomRealTimeConfigMacros_(
+        /*hasStorageConsent=*/ true
+      );
       let adcid;
       return customMacros.ADCID().then((adcid1) => {
         adcid = adcid1;
@@ -448,6 +481,25 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
         return customMacros.ADCID().then((adcid2) => {
           expect(adcid2).to.equal(adcid);
         });
+      });
+    });
+
+    it('should not set adcid if no storage consent', () => {
+      element = createElementWithAttributes(env.win.document, 'amp-ad', {
+        type: 'doubleclick',
+      });
+      env.win.document.body.appendChild(element);
+      impl = new AmpAdNetworkDoubleclickImpl(
+        element,
+        env.win.document,
+        env.win
+      );
+      impl.populateAdUrlState();
+      const customMacros = impl.getCustomRealTimeConfigMacros_(
+        /*hasStorageConsent=*/ false
+      );
+      return customMacros.ADCID().then((adcid) => {
+        expect(adcid).to.be.undefined;
       });
     });
 
@@ -462,7 +514,9 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
         env.win
       );
       impl.populateAdUrlState();
-      const customMacros = impl.getCustomRealTimeConfigMacros_();
+      const customMacros = impl.getCustomRealTimeConfigMacros_(
+        /*hasStorageConsent=*/ true
+      );
       return customMacros.ADCID(0).then((adcid) => {
         expect(adcid).to.be.undefined;
       });
@@ -481,7 +535,9 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
       impl.populateAdUrlState();
       const viewer = Services.viewerForDoc(impl.getAmpDoc());
       env.sandbox.stub(viewer, 'getReferrerUrl').returns(new Promise(() => {}));
-      const customMacros = impl.getCustomRealTimeConfigMacros_();
+      const customMacros = impl.getCustomRealTimeConfigMacros_(
+        /*hasStorageConsent=*/ true
+      );
       return expect(customMacros.REFERRER(0)).to.eventually.be.undefined;
     });
 
@@ -499,7 +555,9 @@ describes.realWin('DoubleClick Fast Fetch RTC', {amp: true}, (env) => {
         env.win
       );
       impl.populateAdUrlState();
-      const customMacros = impl.getCustomRealTimeConfigMacros_();
+      const customMacros = impl.getCustomRealTimeConfigMacros_(
+        /*hasStorageConsent=*/ true
+      );
       expect(customMacros.TGT()).to.equal(JSON.stringify(json['targeting']));
     });
   });

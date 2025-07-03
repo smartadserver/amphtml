@@ -1,6 +1,6 @@
 import {AmpContext} from '#3p/ampcontext';
 
-import {MessageType, serializeMessage} from '#core/3p-frame-messaging';
+import {MessageType_Enum, serializeMessage} from '#core/3p-frame-messaging';
 
 import {Platform} from '#service/platform-impl';
 
@@ -103,8 +103,8 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     expect(context.referrer).to.equal('baz.net');
   });
 
-  it('should add metadata to window.context using window var.', () => {
-    win.AMP_CONTEXT_DATA = generateAttributes();
+  it('should add metadata to window.context using window global.', () => {
+    win.AMP_CONTEXT_DATA = generateAMPConfigObject();
     const context = new AmpContext(win);
     expect(context.location).to.deep.equal({
       'hash': '',
@@ -174,7 +174,7 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     // send an intersection message down
     const messagePayload = {
       sentinel: '1-291921',
-      type: MessageType.INTERSECTION,
+      type: MessageType_Enum.INTERSECTION,
       changes: 'changes',
     };
     const messageData = 'amp-' + JSON.stringify(messagePayload);
@@ -215,7 +215,7 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     // send a page visibility message down
     const messagePayload = {
       sentinel: '1-291921',
-      type: MessageType.EMBED_STATE,
+      type: MessageType_Enum.EMBED_STATE,
       pageHidden: true,
     };
     const messageData = 'amp-' + JSON.stringify(messagePayload);
@@ -272,7 +272,7 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     // send a resize success message down
     const messagePayloadSuccess = {
       sentinel: '1-291921',
-      type: MessageType.EMBED_SIZE_CHANGED,
+      type: MessageType_Enum.EMBED_SIZE_CHANGED,
       id: initialId,
       requestedHeight: 300,
       requestedWidth: 200,
@@ -285,7 +285,7 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     // send a resize failure message down
     const messagePayloadFailure = {
       sentinel: '1-291921',
-      type: MessageType.EMBED_SIZE_DENIED,
+      type: MessageType_Enum.EMBED_SIZE_DENIED,
       id: initialId + 1,
       requestedHeight: 300,
       requestedWidth: 200,
@@ -328,7 +328,7 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     // send a resize success message down
     const messagePayload = {
       sentinel: '1-291921',
-      type: MessageType.EMBED_SIZE_CHANGED,
+      type: MessageType_Enum.EMBED_SIZE_CHANGED,
       requestedHeight: 300,
       requestedWidth: 200,
     };
@@ -374,7 +374,7 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     // send a resize denied message down
     const messagePayload = {
       sentinel: '1-291921',
-      type: MessageType.EMBED_SIZE_DENIED,
+      type: MessageType_Enum.EMBED_SIZE_DENIED,
       requestedHeight: 300,
       requestedWidth: 200,
     };
@@ -392,6 +392,20 @@ describes.sandboxed('3p ampcontext.js', {}, (env) => {
     expect(successCallbackSpy).to.not.be.called;
   });
 });
+
+function generateAMPConfigObject() {
+  return {
+    location: {
+      href: 'https://foo.com/a?b=c',
+    },
+    canonicalUrl: 'https://bar.com',
+    pageViewId: '1',
+    pageViewId64: 'abcdef',
+    sentinel: '1-291921',
+    startTime: 0,
+    referrer: 'baz.net',
+  };
+}
 
 function generateSerializedAttributes(opt_sentinel) {
   return JSON.stringify(generateAttributes(opt_sentinel));

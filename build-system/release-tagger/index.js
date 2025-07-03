@@ -8,12 +8,17 @@
  * 4. channel (beta-percent|stable|lts)
  */
 
-const [action, head, base, channel, time] = process.argv.slice(2);
-
+const {default: dedent} = require('dedent');
+const {action, base, channel, head, sha} = require('minimist')(
+  process.argv.slice(2),
+  {
+    string: ['head', 'base'],
+  }
+);
 const {addLabels, removeLabels} = require('./label-pull-requests');
-const {createOrUpdateTracker} = require('./update-issue-tracker');
+const {cyan, magenta} = require('kleur/colors');
 const {log} = require('../common/logging');
-const {makeRelease} = require('./make-release');
+const {getRelease, makeRelease} = require('./make-release');
 const {publishRelease, rollbackRelease} = require('./update-release');
 
 /**
@@ -21,28 +26,43 @@ const {publishRelease, rollbackRelease} = require('./update-release');
  * @return {Promise<void>}
  */
 async function _promote() {
+  log(
+    cyan(dedent`Release tagger triggered with inputs:
+    action: ${magenta(action)}
+    head: ${magenta(head)}
+    base: ${magenta(base)}
+    channel: ${magenta(channel)}
+    sha: ${magenta(sha)}`)
+  );
+
   const supportedChannels = ['beta-opt-in', 'beta-percent', 'stable', 'lts'];
   if (!supportedChannels.includes(channel)) {
     return;
   }
 
-  if (channel == 'stable') {
-    await publishRelease(head);
-    log('Published release', head);
+  const release = await getRelease(head);
+  if (!release) {
+    const {'html_url': url} = await makeRelease(head, base, channel, sha);
+    log('Created release', magenta(head), 'at', cyan(url));
+  } else {
+    log('Found release', magenta(head), 'at', cyan(release['html_url']));
   }
 
-  if (channel == 'beta-opt-in') {
-    await makeRelease(head, base, channel);
-    log('Created release', head);
+  if (['stable', 'lts'].includes(channel)) {
+    const latest = channel == 'stable';
+    const {'html_url': url} = await publishRelease(head, latest);
+    log('Published release', magenta(head), 'at', cyan(url));
   }
 
   if (['beta-percent', 'stable', 'lts'].includes(channel)) {
     await addLabels(head, base, channel);
-    log('Labeled PRs for release', head, 'and channel', channel);
+    log(
+      'Labeled PRs for release',
+      magenta(head),
+      'and channel',
+      magenta(channel)
+    );
   }
-
-  await createOrUpdateTracker(head, base, channel, time);
-  log('Updated issue tracker for release', head, 'and channel', channel);
 }
 
 /**
@@ -80,8 +100,6 @@ async function main() {
     log('Action: rollback');
     return await _rollback();
   }
-
-  // TODO(estherkim): add release tracker comment on prs
 }
 
 main();

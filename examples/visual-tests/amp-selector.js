@@ -1,9 +1,10 @@
 'use strict';
 
+const {sleep} = require('../../build-system/tasks/visual-diff/helpers');
 const {
   verifySelectorsInvisible,
   verifySelectorsVisible,
-} = require('../../build-system/tasks/visual-diff/helpers');
+} = require('../../build-system/tasks/visual-diff/verifiers');
 
 module.exports = {
   'single selector select option 2': async (page, name) => {
@@ -26,7 +27,7 @@ module.exports = {
     await page.tap('#multi_selector span[option="2"]');
     await page.tap('#disabled_selector span[option="2"]');
     await page.tap('#disabled_selector span[option="3"]');
-    await page.waitForTimeout(100);
+    await sleep(100);
   },
 
   'change mutli select': async (page, name) => {

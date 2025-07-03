@@ -1,13 +1,14 @@
 import {devAssert, userAssert} from '#core/assert';
 import {fromIterator, isArray} from '#core/types/array';
-import {dict, isObject, map} from '#core/types/object';
+import {isObject, map} from '#core/types/object';
 
 import {isExperimentOn} from '#experiments';
 
 import {Services} from '#service';
 
+import {user} from '#utils/log';
+
 import {isFormDataWrapper} from '../form-data-wrapper';
-import {user} from '../log';
 import {getMode} from '../mode';
 import {
   getCorsUrl,
@@ -215,9 +216,9 @@ export function getViewerInterceptResponse(win, ampdocSingle, input, init) {
       ) {
         return;
       }
-      const messagePayload = dict({
+      const messagePayload = {
         'originalRequest': toStructuredCloneable(input, init),
-      });
+      };
       return viewer
         .sendMessageAwaitResponse('xhr', messagePayload)
         .then((response) =>
@@ -262,7 +263,7 @@ export function setupInit(opt_init, opt_accept) {
   );
 
   init.method = normalizeMethod_(init.method);
-  init.headers = init.headers || dict({});
+  init.headers = init.headers || {};
   if (opt_accept) {
     init.headers['Accept'] = opt_accept;
   }

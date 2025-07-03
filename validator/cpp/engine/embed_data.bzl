@@ -39,10 +39,10 @@ embed_data = rule(
         ),
         "header_generator": attr.label(
             executable = True,
-            cfg = "host",
+            cfg = "exec",
             allow_files = True,
             default = Label(
-                "//scripts:filecontents_to_cpp_header",
+                "//cpp/engine/scripts:filecontents_to_cpp_header",
             ),
         ),
     },

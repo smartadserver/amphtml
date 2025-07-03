@@ -1,3 +1,13 @@
+import {Deferred} from '#core/data-structures/promise';
+import {once} from '#core/types/function';
+import {hasOwn} from '#core/types/object';
+
+import {Services} from '#service';
+import {getRandomString64} from '#service/cid-impl';
+
+import {dev, devAssert} from '#utils/log';
+
+import {expandConsentEndpointUrl, getConsentCID} from './consent-config';
 import {
   CONSENT_ITEM_STATE,
   ConsentInfoDef,
@@ -12,15 +22,9 @@ import {
   isConsentInfoStoredValueSame,
   recalculateConsentStateValue,
 } from './consent-info';
-import {Deferred} from '#core/data-structures/promise';
-import {Services} from '#service';
-import {assertHttpsUrl} from '../../../src/url';
-import {dev, devAssert} from '../../../src/log';
-import {expandConsentEndpointUrl, getConsentCID} from './consent-config';
-import {hasOwn} from '#core/types/object';
-import {once} from '#core/types/function';
-import {getRandomString64} from '#service/cid-impl';
+
 import {getServicePromiseForDoc} from '../../../src/service-helpers';
+import {assertHttpsUrl} from '../../../src/url';
 
 const TAG = 'CONSENT-STATE-MANAGER';
 
@@ -59,7 +63,7 @@ export class ConsentStateManager {
     /** @private {?function()} */
     this.consentReadyResolver_ = null;
 
-    /** @private {Object<string, PURPOSE_CONSENT_STATE>|undefined} */
+    /** @private {{[key: string]: PURPOSE_CONSENT_STATE}|undefined} */
     this.purposeConsents_ = undefined;
 
     const allPurposeConsentsDeferred = new Deferred();
@@ -106,8 +110,14 @@ export class ConsentStateManager {
    * @param {CONSENT_ITEM_STATE} state
    * @param {string=} consentStr
    * @param {ConsentMetadataDef=} opt_consentMetadata
+   * @param {number=} opt_tcfPolicyVersion
    */
-  updateConsentInstanceState(state, consentStr, opt_consentMetadata) {
+  updateConsentInstanceState(
+    state,
+    consentStr,
+    opt_consentMetadata,
+    opt_tcfPolicyVersion
+  ) {
     if (!this.instance_) {
       dev().error(TAG, 'instance not registered');
       return;
@@ -117,7 +127,8 @@ export class ConsentStateManager {
       consentStr,
       this.purposeConsents_,
       opt_consentMetadata,
-      false
+      false,
+      opt_tcfPolicyVersion
     );
 
     if (this.consentChangeHandler_) {
@@ -126,7 +137,9 @@ export class ConsentStateManager {
           state,
           consentStr,
           opt_consentMetadata,
-          this.purposeConsents_
+          this.purposeConsents_,
+          undefined,
+          opt_tcfPolicyVersion
         )
       );
       // Need to be called after handler.
@@ -137,7 +150,7 @@ export class ConsentStateManager {
   /**
    * Update our current purposeConsents, that will be
    * used in subsequent calls to update().
-   * @param {!Object<string, boolean>} purposeMap
+   * @param {!{[key: string]: boolean}} purposeMap
    * @param {boolean} defaultsOnly
    */
   updateConsentInstancePurposes(purposeMap, defaultsOnly = false) {
@@ -231,11 +244,15 @@ export class ConsentStateManager {
   }
 
   /**
-   * Sets the dirty bit so current consent info won't be used for
-   * decision making on next visit
+   * Set dirtyBit to current consent info. Refresh stored consent value with
+   * dirtyBit
+   * @param {boolean=} dirty
+   * @return {Promise<void>}
+   * TODO(alanorozco): Remove `dirty` argument and always set to true once
+   * we remove clearDirtyBitOnResponse_dontUseThisItMightBeRemoved.
    */
-  setDirtyBit() {
-    this.instance_.setDirtyBit();
+  setDirtyBit(dirty = true) {
+    return this.instance_.setDirtyBit(dirty);
   }
 
   /**
@@ -320,14 +337,17 @@ export class ConsentInstance {
   /**
    * Set dirtyBit to current consent info. Refresh stored consent value with
    * dirtyBit
-   * @return {*} TODO(#23582): Specify return type
+   * @param {boolean=} dirty
+   * @return {Promise<void>}
+   * TODO(alanorozco): Remove `dirty` argument and always set to true once
+   * we remove clearDirtyBitOnResponse_dontUseThisItMightBeRemoved.
    */
-  setDirtyBit() {
-    // Note: this.hasDirtyBitNext_ is only set to true when 'forcePromptNext'
+  setDirtyBit(dirty = true) {
+    // Note: this.hasDirtyBitNext_ is only set to true when 'forcePromptOnNext'
     // is set to true and we need to set dirtyBit for next visit.
-    this.hasDirtyBitNext_ = true;
+    this.hasDirtyBitNext_ = dirty;
     return this.get().then((info) => {
-      if (hasDirtyBit(info)) {
+      if (hasDirtyBit(info) === dirty) {
         // Current stored value has dirtyBit and is no longer valid.
         // No need to update with dirtyBit
         return;
@@ -337,7 +357,7 @@ export class ConsentInstance {
         info['consentString'],
         info['purposeConsents'],
         info['consentMetadata'],
-        true
+        dirty
       );
     });
   }
@@ -346,16 +366,18 @@ export class ConsentInstance {
    * Update the local consent state list
    * @param {!CONSENT_ITEM_STATE} state
    * @param {string=} consentString
-   * @param {Object<string, PURPOSE_CONSENT_STATE>=} purposeConsents
+   * @param {{[key: string]: PURPOSE_CONSENT_STATE}=} purposeConsents
    * @param {ConsentMetadataDef=} opt_consentMetadata
    * @param {boolean=} opt_systemUpdate
+   * @param {number=} opt_tcfPolicyVersion
    */
   update(
     state,
     consentString,
     purposeConsents,
     opt_consentMetadata,
-    opt_systemUpdate
+    opt_systemUpdate,
+    opt_tcfPolicyVersion
   ) {
     const localState =
       this.localConsentInfo_ && this.localConsentInfo_['consentState'];
@@ -368,7 +390,9 @@ export class ConsentInstance {
         calculatedState,
         this.localConsentInfo_?.consentString,
         this.localConsentInfo_?.consentMetadata,
-        this.localConsentInfo_?.purposeConsents
+        this.localConsentInfo_?.purposeConsents,
+        undefined,
+        this.localConsentInfo_?.tcfPolicyVersion
       );
       return;
     }
@@ -382,7 +406,8 @@ export class ConsentInstance {
         consentString,
         opt_consentMetadata,
         purposeConsents,
-        true
+        true,
+        opt_tcfPolicyVersion
       );
     } else {
       // Any user update makes the current state valid, thus remove dirtyBit
@@ -391,7 +416,9 @@ export class ConsentInstance {
         calculatedState,
         consentString,
         opt_consentMetadata,
-        purposeConsents
+        purposeConsents,
+        undefined,
+        opt_tcfPolicyVersion
       );
     }
 
@@ -400,7 +427,8 @@ export class ConsentInstance {
       consentString,
       opt_consentMetadata,
       purposeConsents,
-      this.hasDirtyBitNext_
+      this.hasDirtyBitNext_,
+      opt_tcfPolicyVersion
     );
 
     if (isConsentInfoStoredValueSame(newConsentInfo, this.savedConsentInfo_)) {
@@ -532,6 +560,9 @@ export class ConsentInstance {
       }
       if (consentInfo['purposeConsents']) {
         request['purposeConsents'] = consentInfo['purposeConsents'];
+      }
+      if (consentInfo['tcfPolicyVersion']) {
+        request['tcfPolicyVersion'] = consentInfo['tcfPolicyVersion'];
       }
       const init = {
         credentials: 'include',

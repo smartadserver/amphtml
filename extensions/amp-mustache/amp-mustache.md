@@ -21,7 +21,7 @@ teaser:
 
 Mustache is a logic-less template syntax. See [Mustache specification](http://mustache.github.io/mustache.5.html) for more details. Some of the core Mustache tags are:
 
--   `{{variable}}`: A variable tag. It outputs the the HTML-escaped value of a variable.
+-   `{{variable}}`: A variable tag. It outputs the HTML-escaped value of a variable.
 -   `{{#section}} {{/section}}`: A section tag. It can test the existence of a variable and iterate over it if it's an array.
 -   `{{^section}} {{/section}}`: An inverted tag. It can test the non-existence of a variable.
 -   `{{{unescaped}}}`: Unescaped HTML. It's restricted in the markup it may output (see "Restrictions" below).
@@ -74,7 +74,19 @@ that among other things, you can't use `amp-mustache` to:
 -   Calculate tag name. E.g. `<{{tagName}}>` is not allowed.
 -   Calculate attribute name. E.g. `<div {{attrName}}=something>` is not allowed.
 
-The output of "triple-mustache" is sanitized to only allow the following tags: `a`, `amp-list`, `b`, `br`, `caption`, `col`, `colgroup`, `code`, `del`, `div`, `em`, `h1`, `h2`, `h3`, `hr`, `i`, `ins`, `li`, `mark`, `ol`, `p`, `q`, `s`, `small`, `span`, `strong`, `sub`, `sup`, `table`, `tbody`, `time`, `td`, `th`, `thead`, `tfoot`, `tr`, `u`, `ul`.
+The output of "triple-mustache" is sanitized to only allow the following tags:
+
+[filter formats="websites, ads"]
+
+`a`, `amp-img`, `article`, `aside`, `b`, `blockquote`, `br`, `caption`, `code`, `col`, `colgroup`, `dd`, `del`, `details`, `div`, `dl`, `dt`, `em`, `figcaption`, `figure`, `footer`, `h1`, `h2`, `h3`, `header`, `hr`, `i`, `ins`, `li`, `main`, `mark`, `nav`, `ol`, `p`, `pre`, `q`, `s`, `section`, `small`, `span`, `strong`, `sub`, `summary`, `sup`, `table`, `tbody`, `td`, `tfoot`, `th`, `thead`, `time`, `tr`, `u`, `ul`.
+
+[/filter]<!-- formats="websites, ads" -->
+
+[filter formats="email"]
+
+`a`, `article`, `aside`, `b`, `blockquote`, `br`, `caption`, `code`, `col`, `colgroup`, `dd`, `del`, `details`, `div`, `dl`, `dt`, `em`, `figcaption`, `figure`, `footer`, `h1`, `h2`, `h3`, `header`, `hr`, `i`, `ins`, `li`, `main`, `mark`, `nav`, `ol`, `p`, `pre`, `q`, `s`, `section`, `small`, `span`, `strong`, `sub`, `summary`, `sup`, `table`, `tbody`, `td`, `tfoot`, `th`, `thead`, `time`, `tr`, `u`, `ul`.
+
+[/filter]<!-- formats="email" -->
 
 ### Sanitization
 

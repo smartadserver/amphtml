@@ -26,8 +26,7 @@ describes.endtoend(
 
     // TODO(sparhami) Cover swipe to dismiss if possible.
     // TODO(sparhami) Test basic transition to gallery and back.
-    // TODO(#28948) fix this flaky test.
-    it.skip('should open/close lightbox', async () => {
+    it('should open/close lightbox', async () => {
       // First open the gallery.
       const firstAmpImg = await controller.findElement('amp-img');
       await controller.click(firstAmpImg);
@@ -51,6 +50,28 @@ describes.endtoend(
       // Now close the gallery via button click and wait for it to close.
       await controller.click(closeButton);
       await controller.findElement('amp-lightbox-gallery[hidden]');
+    });
+
+    it('should display the image that opened the lightbox', async () => {
+      const clickedImage = await controller.findElement('#basic-2');
+
+      const imageSrc = await controller.getElementAttribute(
+        clickedImage,
+        'src'
+      );
+
+      await controller.click(clickedImage);
+
+      const slideImage = await controller.findElement(
+        // pick the img element with the same src as the clickedImage,
+        // inside the non hidden slide (this is the active slide),
+        // that is inside the amp-light-box with the default group id
+        `[amp-lightbox-group="default"] .amp-carousel-slide[aria-hidden="false"] img[src="${imageSrc}"]`
+      );
+
+      const activeImageRect = await controller.getElementRect(slideImage);
+      // If x is negative, it means this is the previous active slide, if positive it is the next slide. But if 0, it is the active slide
+      await expect(activeImageRect.x).to.equal(0);
     });
   }
 );

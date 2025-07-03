@@ -1,7 +1,6 @@
-import {TOKEN_VALUE} from '#ads/google/a4a/utils';
-
 import {createElementWithAttributes, escapeHtml} from '#core/dom';
-import {dict} from '#core/types/object';
+
+import {isAttributionReportingAllowed} from '#utils/privacy-sandbox-utils';
 
 import {getFieSafeScriptSrcs} from '../../../src/friendly-iframe-embed';
 
@@ -53,7 +52,6 @@ export const createSecureDocSkeleton = (url, sanitizedHeadElements, body) =>
       default-src 'none';
       style-src ${fontProviderAllowList} 'unsafe-inline';
     ">
-    <meta http-equiv="origin-trial" content=${TOKEN_VALUE}>    
     ${sanitizedHeadElements}
   </head>
   <body>${body}</body>
@@ -70,39 +68,26 @@ export const createSecureDocSkeleton = (url, sanitizedHeadElements, body) =>
 export function createSecureFrame(win, title, height, width) {
   const {document} = win;
   const iframe = /** @type {!HTMLIFrameElement} */ (
-    createElementWithAttributes(
-      document,
-      'iframe',
-      dict({
-        // NOTE: It is possible for either width or height to be 'auto',
-        // a non-numeric value.
-        'height': height,
-        'width': width,
-        'title': title,
-        'frameborder': '0',
-        'allowfullscreen': '',
-        'allowtransparency': '',
-        'scrolling': 'no',
-        'sandbox': sandboxVals,
-        'role': 'region',
-        'aria-label': 'Advertisement',
-        'tabindex': '0',
-      })
-    )
+    createElementWithAttributes(document, 'iframe', {
+      // NOTE: It is possible for either width or height to be 'auto',
+      // a non-numeric value.
+      'height': height,
+      'width': width,
+      'title': title,
+      'frameborder': '0',
+      'allowfullscreen': '',
+      'allowtransparency': '',
+      'scrolling': 'no',
+      'sandbox': sandboxVals,
+      'role': 'region',
+      'aria-label': 'Advertisement',
+      'tabindex': '0',
+    })
   );
 
-  if (isAttributionReportingSupported(document)) {
+  if (isAttributionReportingAllowed(document)) {
     iframe.setAttribute('allow', `attribution-reporting 'src'`);
   }
 
   return iframe;
-}
-
-/**
- * Determine if `attribution-reporting` API is available in browser.
- * @param {!Document} doc
- * @return {boolean}
- */
-export function isAttributionReportingSupported(doc) {
-  return doc.featurePolicy?.features().includes('attribution-reporting');
 }

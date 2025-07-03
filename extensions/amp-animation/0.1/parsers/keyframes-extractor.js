@@ -1,5 +1,5 @@
 import {endsWith} from '#core/types/string';
-import {toWin} from '#core/window';
+import {getWin} from '#core/window';
 
 /**
  * Finds and extracts keyframes definition for Web Animations from CSS styles.
@@ -12,7 +12,7 @@ export function extractKeyframes(rootNode, name) {
   if (!styleSheets) {
     return null;
   }
-  const win = toWin((rootNode.ownerDocument || rootNode).defaultView);
+  const win = getWin(rootNode);
   // Go from the last to first since the last rule wins in CSS.
   for (let i = styleSheets.length - 1; i >= 0; i--) {
     const keyframes = scanStyle(
@@ -129,8 +129,8 @@ function buildKeyframes(keyframesRule) {
       keyframeRule.keyText == 'from'
         ? 0
         : keyframeRule.keyText == 'to'
-        ? 1
-        : parseFloat(keyframeRule.keyText) / 100;
+          ? 1
+          : parseFloat(keyframeRule.keyText) / 100;
     const {style} = keyframeRule;
     for (let j = 0; j < style.length; j++) {
       const styleName = style[j];

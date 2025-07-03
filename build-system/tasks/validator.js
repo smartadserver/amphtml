@@ -25,19 +25,22 @@ async function validator() {
  */
 async function validatorCpp() {
   const bazelCmd = [
-    'bazel test',
+    'bazel-5.4.0 test',
     '--repo_env=CC=clang',
     "--cxxopt='-std=c++17'",
+    '--discard_analysis_cache',
+    '--notrack_incremental_state',
+    '--nokeep_state_after_build',
     '--test_output=errors',
     '--ui_event_filters=INFO',
     '--noshow_progress',
     '--noshow_loading_progress',
     '--test_summary=detailed',
     '--verbose_failures',
-    'validator_test',
+    'cpp/engine:validator_test',
   ].join(' ');
   execOrDie(bazelCmd, {
-    cwd: 'validator/cpp/engine',
+    cwd: 'validator',
     stdio: 'inherit',
   });
 }

@@ -8,52 +8,34 @@ describes.sandboxed('released components: ', {}, function () {
   runTest.call(this, false);
 });
 
-describes.sandboxed('released components with polyfills: ', {}, function () {
-  runTest.call(this, true);
-});
-
-function runTest(shouldKillPolyfillableApis) {
+function runTest() {
   describe('Rendering of released components', function () {
     this.timeout(5000);
     let fixture;
-    beforeEach(() => {
+    beforeEach(async () => {
       this.timeout(3100);
-      return createFixtureIframe('test/fixtures/released.html', 3000, (win) => {
-        if (shouldKillPolyfillableApis) {
-          win.Promise = undefined;
-        }
-      }).then((f) => {
-        fixture = f;
-      });
+      fixture = await createFixtureIframe('test/fixtures/released.html', 3000);
     });
 
-    // There is really weird behavior when running this test in FF during
-    // cross-browser testing. It never renders the ad, even though it appears to
-    // work when looking at the rendering. The test passes when running locally
-    // in FF.
-    // TODO(lannka, #3561): unmute the test.
-    it.configure()
-      .skipFirefox()
-      .skipChrome()
-      .run('all components should get loaded', function () {
-        this.timeout(15000);
-        return pollForLayout(fixture.win, 12, 10000)
-          .then(() => {
-            expect(
-              fixture.doc.querySelectorAll('.i-amphtml-element')
-            ).to.have.length(16);
-            expect(
-              fixture.doc.querySelectorAll('.i-amphtml-layout')
-            ).to.have.length(12);
-            expect(
-              fixture.doc.querySelectorAll('.i-amphtml-error')
-            ).to.have.length(0);
-            checkGlobalScope(fixture.win);
-          })
-          .then(() => {
-            return expectBodyToBecomeVisible(fixture.win);
-          });
-      });
+    it('all components should get loaded', function () {
+      this.timeout(15000);
+      return pollForLayout(fixture.win, 12, 10000)
+        .then(() => {
+          expect(
+            fixture.doc.querySelectorAll('.i-amphtml-element')
+          ).to.have.length(16);
+          expect(
+            fixture.doc.querySelectorAll('.i-amphtml-layout')
+          ).to.have.length(12);
+          expect(
+            fixture.doc.querySelectorAll('.i-amphtml-error')
+          ).to.have.length(0);
+          checkGlobalScope(fixture.win);
+        })
+        .then(() => {
+          return expectBodyToBecomeVisible(fixture.win);
+        });
+    });
 
     it('sanity for Firefox while we skip above', function () {
       this.timeout(15000);

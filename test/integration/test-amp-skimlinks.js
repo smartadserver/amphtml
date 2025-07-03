@@ -1,6 +1,6 @@
 import {parseQueryString} from '#core/types/string/url';
 
-import {BrowserController, RequestBank} from '#testing/test-helper';
+import {BrowserController, RequestBank} from '#testing/helpers/service';
 
 import {PLATFORM_NAME} from '../../extensions/amp-skimlinks/0.1/constants';
 
@@ -104,12 +104,7 @@ describes.sandboxed.skip('amp-skimlinks', {}, function () {
       });
     });
 
-    // TODO(alanorozco): Unskip on firefox
-    const itSkipFirefox = (desc, cb) =>
-      it.configure().skipFirefox().run(desc, cb);
-
-    // TODO(alanorozco): Unskip on firefox
-    itSkipFirefox('should send NA-tracking on non-merchant link click ', () => {
+    it('should send NA-tracking on non-merchant link click', () => {
       // Give 500ms for amp-skimlinks to set up.
       return browser.wait(500).then(() => {
         clickLinkAndNavigate('#non-merchant-link');

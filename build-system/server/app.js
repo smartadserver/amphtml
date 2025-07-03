@@ -10,7 +10,6 @@ const bodyParser = require('body-parser');
 const cors = require('./amp-cors');
 const devDashboard = require('./app-index');
 const express = require('express');
-const fetch = require('node-fetch');
 const formidable = require('formidable');
 const fs = require('fs');
 const jsdom = require('jsdom');
@@ -73,10 +72,7 @@ app.use(bodyParser.text());
 // Middleware is executed in order, so this must be at the top.
 // TODO(#24333): Migrate all server URL handlers to new-server/router and
 // deprecate app.js.
-// TODO(erwinmombay, #32865): Make visual diff tests use the new server
-if (!argv._.includes('visual-diff')) {
-  app.use(require('./new-server/router'));
-}
+app.use(require('./new-server/router'));
 
 app.use(require('./routes/a4a-envelopes'));
 app.use('/amp4test', require('./amp4test').app);
@@ -96,7 +92,7 @@ app.use((req, res, next) => {
   if (req.query.csp) {
     res.set({
       'content-security-policy':
-        "default-src * blob: data:; script-src https://cdn.ampproject.org/rtv/ https://cdn.ampproject.org/v0.js https://cdn.ampproject.org/v0/ https://cdn.ampproject.org/viewer/ http://localhost:8000 https://localhost:8000; object-src 'none'; style-src 'unsafe-inline' https://cdn.ampproject.org/rtv/ https://cdn.materialdesignicons.com https://cloud.typography.com https://fast.fonts.net https://fonts.googleapis.com https://maxcdn.bootstrapcdn.com https://p.typekit.net https://use.fontawesome.com https://use.typekit.net; report-uri https://csp-collector.appspot.com/csp/amp",
+        "default-src * blob: data:; script-src https://cdn.ampproject.org/rtv/ https://cdn.ampproject.org/v0.js https://cdn.ampproject.org/v0/ https://cdn.ampproject.org/viewer/ http://localhost:8000 https://localhost:8000; object-src 'none'; style-src 'unsafe-inline' https://cdn.ampproject.org/rtv/ https://cdn.materialdesignicons.com https://cloud.typography.com https://fast.fonts.net https://fonts.googleapis.com https://maxcdn.bootstrapcdn.com https://p.typekit.net https://use.fontawesome.com https://use.typekit.net https://cdnjs.cloudflare.com/ajax/libs/font-awesome/; report-uri https://csp-collector.appspot.com/csp/amp",
     });
   }
   next();
@@ -653,7 +649,7 @@ function liveListInsert(liveList, node) {
      */
     const child = /** @type {*} */ (node.cloneNode(true));
     child.setAttribute('id', `list-item-${itemCtr++}`);
-    child.setAttribute('data-sort-time', Date.now());
+    child.setAttribute('data-sort-time', Date.now().toString());
     liveList.querySelector('[items]')?.appendChild(child);
   }
 }
@@ -1336,7 +1332,7 @@ app.use('/subscription/register', (req, res) => {
   meteringStateStore[req.body.ampReaderId] = {
     id: meteringStateId,
     standardAttributes: {
-      // eslint-disable-next-line google-camelcase/google-camelcase
+      // eslint-disable-next-line local/camelcase
       registered_user: {
         timestamp: registrationTimestamp, // In seconds.
       },
@@ -1402,6 +1398,19 @@ app.get(
     next();
   }
 );
+
+/**
+ * Handle amp-story translation file requests with an rtv path.
+ * We need to make sure we only handle the amp-story requests since this
+ * can affect other tests with json requests.
+ */
+app.get('/dist/rtv/*/v0/amp-story*.json', async (req, _res, next) => {
+  const fileName = path.basename(req.path);
+  let filePath = 'https://cdn.ampproject.org/v0/' + fileName;
+  filePath = replaceUrls(SERVE_MODE, filePath);
+  req.url = filePath;
+  next();
+});
 
 if (argv.coverage === 'live') {
   app.get('/dist/amp.js', async (req, res) => {

@@ -71,6 +71,14 @@ export class FakeWindow {
     // Document.
     /** @const {!HTMLDocument} */
     this.document = self.document.implementation.createHTMLDocument('');
+    // NOTE: There was a change between chrome 119 and 120 where the above
+    // self.document.implementation.createHTMLDocument no longer inherits
+    // the baseURI of self.document. We explicitly set and force it thru
+    // a `<base>` element.
+    const base = this.document.createElement('base');
+    base.href = self.document.baseURI;
+    this.document.head.appendChild(base);
+
     Object.defineProperty(this.document, 'defaultView', {
       get: () => this,
     });
@@ -210,6 +218,9 @@ export class FakeWindow {
     /** @const */
     this.Date = window.Date;
 
+    /** @const */
+    this.performance = new FakePerformance(this);
+
     /** polyfill setTimeout. */
     this.setTimeout = function () {
       return window.setTimeout.apply(window, arguments);
@@ -325,8 +336,8 @@ class EventListeners {
         typeof captureOrOpts == 'boolean'
           ? captureOrOpts
           : typeof captureOrOpts == 'object'
-          ? captureOrOpts.capture || false
-          : false,
+            ? captureOrOpts.capture || false
+            : false,
       options: typeof captureOrOpts == 'object' ? captureOrOpts : null,
     };
   }
@@ -609,7 +620,7 @@ export class FakeHistory {
  */
 export class FakeStorage {
   constructor() {
-    /** @const {!Object<string, string>} */
+    /** @const {!{[key: string]: string}} */
     this.values = {};
 
     // Length.
@@ -672,7 +683,7 @@ export class FakeCustomElements {
     /** @type {number} */
     this.count = 0;
 
-    /** @const {!Object<string, !{prototype: !Prototype}>} */
+    /** @const {!{[key: string]: !{prototype: !Prototype}}} */
     this.elements = {};
 
     /**
@@ -748,6 +759,21 @@ export class FakeMutationObserver {
       this.scheduled_ = null;
       this.callback_(this.takeRecords_());
     }));
+  }
+}
+
+export class FakePerformance {
+  constructor(win) {
+    /** @const */
+    this.win_ = win;
+  }
+
+  get timeOrigin() {
+    return 1;
+  }
+
+  now() {
+    return this.win_.Date.now();
   }
 }
 

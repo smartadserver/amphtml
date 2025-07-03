@@ -1,9 +1,6 @@
 import {
   createViewportObserver,
   observeIntersections,
-  observeWithSharedInOb,
-  unobserveIntersections,
-  unobserveWithSharedInOb,
 } from '#core/dom/layout/viewport-observer';
 
 describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
@@ -23,18 +20,30 @@ describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
 
     it('Uses implicit root.', () => {
       createViewportObserver(noop, win);
-      expect(ctorSpy).calledWith(noop, {threshold: undefined, root: undefined});
+      expect(ctorSpy).calledWith(noop, {
+        threshold: undefined,
+        root: undefined,
+        rootMargin: undefined,
+      });
     });
 
     it('Pass along threshold argument', () => {
       createViewportObserver(noop, win, {threshold: 0.5});
-      expect(ctorSpy).calledWith(noop, {threshold: 0.5, root: undefined});
+      expect(ctorSpy).calledWith(noop, {
+        threshold: 0.5,
+        root: undefined,
+        rootMargin: undefined,
+      });
     });
 
     it('Sets document root appropriately', () => {
       // Implicit root when not iframed.
       createViewportObserver(noop, win, {needsRootBounds: true});
-      expect(ctorSpy).calledWith(noop, {threshold: undefined, root: undefined});
+      expect(ctorSpy).calledWith(noop, {
+        threshold: undefined,
+        root: undefined,
+        rootMargin: undefined,
+      });
 
       // Document root when iframed.
       win.parent = {};
@@ -42,6 +51,7 @@ describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
       expect(ctorSpy).calledWith(noop, {
         threshold: undefined,
         root: win.document,
+        rootMargin: undefined,
       });
     });
   });
@@ -80,23 +90,28 @@ describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
       ioCallback([{target: el, isIntersecting: inViewport}]);
     }
 
-    it('observed element should have its callback fired each time it enters/exist the viewport.', () => {
+    it('observed element should have its callback fired each time it enters/exits the viewport.', () => {
       const viewportEvents = [];
-      observeWithSharedInOb(el1, (inViewport) =>
-        viewportEvents.push(inViewport)
-      );
+      observeIntersections(el1, (entry) => viewportEvents.push(entry));
       toggleViewport(el1, true);
       toggleViewport(el1, false);
 
-      expect(viewportEvents).eql([true, false]);
+      expect(viewportEvents[0].target).to.eql(el1);
+      expect(viewportEvents[0].isIntersecting).to.be.true;
+      expect(viewportEvents[1].target).to.eql(el1);
+      expect(viewportEvents[1].isIntersecting).to.be.false;
     });
 
     it('can independently observe multiple elements', () => {
       const el1Events = [];
       const el2Events = [];
 
-      observeWithSharedInOb(el1, (inViewport) => el1Events.push(inViewport));
-      observeWithSharedInOb(el2, (inViewport) => el2Events.push(inViewport));
+      observeIntersections(el1, (entry) =>
+        el1Events.push(entry.isIntersecting)
+      );
+      observeIntersections(el2, (entry) =>
+        el2Events.push(entry.isIntersecting)
+      );
       toggleViewport(el1, false);
       toggleViewport(el2, true);
       toggleViewport(el1, true);
@@ -108,10 +123,12 @@ describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
     it('once unobserved, the callback is no longer fired', () => {
       const el1Events = [];
 
-      observeWithSharedInOb(el1, (inViewport) => el1Events.push(inViewport));
+      const unobserveIntersections = observeIntersections(el1, (entry) =>
+        el1Events.push(entry.isIntersecting)
+      );
       toggleViewport(el1, false);
 
-      unobserveWithSharedInOb(el1);
+      unobserveIntersections();
       toggleViewport(el1, true);
       toggleViewport(el1, false);
 
@@ -120,8 +137,8 @@ describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
 
     it('A quick observe and unobserve pair should not cause an error or fire the callback', () => {
       const spy = env.sandbox.spy();
-      observeWithSharedInOb(el1, spy);
-      unobserveWithSharedInOb(el1);
+      const unobserveIntersections = observeIntersections(el1, spy);
+      unobserveIntersections();
       toggleViewport(el1, true);
 
       expect(spy).not.called;
@@ -150,22 +167,22 @@ describes.sandboxed('DOM - layout - Viewport Observer', {}, (env) => {
     it('can observe and unobserve an element with multiple callbacks', () => {
       const cb1 = env.sandbox.spy();
       const cb2 = env.sandbox.spy();
-      observeIntersections(el1, cb1);
-      observeIntersections(el1, cb2);
+      const unobserveIntersectionsCb1 = observeIntersections(el1, cb1);
+      const unobserveIntersectionsCb2 = observeIntersections(el1, cb2);
       toggleViewport(el1, true);
       expect(cb1).to.be.called;
       expect(cb2).to.be.called;
 
       cb1.resetHistory();
       cb2.resetHistory();
-      unobserveIntersections(el1, cb2);
+      unobserveIntersectionsCb2();
       toggleViewport(el1, true);
       expect(cb1).to.be.called;
       expect(cb2).not.to.be.called;
 
       cb1.resetHistory();
       cb2.resetHistory();
-      unobserveIntersections(el1, cb1);
+      unobserveIntersectionsCb1();
       toggleViewport(el1, true);
       expect(cb1).not.to.be.called;
       expect(cb2).not.to.be.called;

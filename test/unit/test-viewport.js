@@ -20,8 +20,11 @@ import {
 } from '#service/viewport/viewport-impl';
 import {installVsyncService} from '#service/vsync-impl';
 
-import {loadPromise} from '../../src/event-helper';
-import {dev} from '../../src/log';
+import {loadPromise} from '#utils/event-helper';
+import {dev} from '#utils/log';
+
+import {FakePerformance} from '#testing/fake-dom';
+
 import {getMode} from '../../src/mode';
 import {setParentWindow} from '../../src/service-helpers';
 
@@ -1266,25 +1269,19 @@ describes.fakeWin('Viewport', {}, (env) => {
       root.className = '';
     });
 
-    // TODO(zhouyx, #11827): Make this test work on Safari.
-    it.configure()
-      .skipSafari()
-      .run('should not set pan-y when not embedded', () => {
-        viewer.isEmbedded = () => false;
-        viewport = new ViewportImpl(ampdoc, binding, viewer);
-        expect(win.getComputedStyle(root)['touch-action']).to.equal('auto');
-      });
+    it('should not set pan-y when not embedded', () => {
+      viewer.isEmbedded = () => false;
+      viewport = new ViewportImpl(ampdoc, binding, viewer);
+      expect(win.getComputedStyle(root)['touch-action']).to.equal('auto');
+    });
 
-    // TODO(zhouyx, #11827): Make this test work on Safari.
-    it.configure()
-      .skipSafari()
-      .run('should set pan-y with experiment', () => {
-        viewer.isEmbedded = () => true;
-        viewport = new ViewportImpl(ampdoc, binding, viewer);
-        expect(win.getComputedStyle(root)['touch-action']).to.equal(
-          'pan-y pinch-zoom'
-        );
-      });
+    it('should set pan-y with experiment', () => {
+      viewer.isEmbedded = () => true;
+      viewport = new ViewportImpl(ampdoc, binding, viewer);
+      expect(win.getComputedStyle(root)['touch-action']).to.equal(
+        'pan-y pinch-zoom'
+      );
+    });
   });
 
   describe('for child window', () => {
@@ -1647,6 +1644,7 @@ describes.sandboxed('Viewport META', {}, (env) => {
         clearTimeout: window.clearTimeout,
         location: {},
         Promise: window.Promise,
+        performance: new FakePerformance(window),
       };
       installTimerService(windowApi);
       installVsyncService(windowApi);

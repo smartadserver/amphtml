@@ -12,7 +12,15 @@ const jobName = 'build-release.js';
 
 runReleaseJob(jobName, async () => {
   const {ESM, FLAVOR} = process.env;
-  timedExecOrThrow(`amp release --flavor=${FLAVOR} --${ESM}`);
+
+  // TODO(danielrozenberg): remove temporary custom-config when ampjs.org
+  // becomes the default runtime CDN.
+  fs.writeJsonSync('build-system/global-configs/custom-config.json', {
+    'cdnUrl': 'https://ampjs.org',
+    'cdnProxyRegex': '^https:\\/\\/ampjs\\.org$',
+  });
+
+  timedExecOrThrow(`amp release --flavor=${FLAVOR} --${ESM} --dedup_v0`);
   fs.ensureDirSync(`/tmp/workspace/releases/${FLAVOR}/${ESM}`);
   fs.copySync('release/', `/tmp/workspace/releases/${FLAVOR}/${ESM}`);
 });

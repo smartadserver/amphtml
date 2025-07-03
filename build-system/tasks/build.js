@@ -10,9 +10,13 @@ const {
   exitCtrlcHandler,
 } = require('../common/ctrlcHandler');
 const {buildExtensions} = require('./extension-helpers');
-const {buildVendorConfigs} = require('./3p-vendor-helpers');
+const {
+  buildVendorConfigs,
+  shouldBuildVendorConfigs,
+} = require('./3p-vendor-helpers');
 const {compileCss} = require('./css');
 const {parseExtensionFlags} = require('./extension-helpers');
+const {buildStoryLocalization} = require('./build-story-localization');
 
 const argv = require('minimist')(process.argv.slice(2));
 
@@ -24,7 +28,11 @@ const argv = require('minimist')(process.argv.slice(2));
  * @return {Promise}
  */
 async function runPreBuildSteps(options) {
-  return Promise.all([compileCss(options), bootstrapThirdPartyFrames(options)]);
+  return Promise.all([
+    buildStoryLocalization(options),
+    compileCss(options),
+    bootstrapThirdPartyFrames(options),
+  ]);
 }
 
 /**
@@ -51,7 +59,8 @@ async function build() {
   }
   await buildExtensions(options);
 
-  if (!argv.core_runtime_only) {
+  // This step is to be run only during a full `amp build`.
+  if (shouldBuildVendorConfigs()) {
     await buildVendorConfigs(options);
   }
   if (!argv.watch) {
@@ -64,7 +73,7 @@ module.exports = {
   runPreBuildSteps,
 };
 
-/* eslint "google-camelcase/google-camelcase": 0 */
+/* eslint "local/camelcase": 0 */
 
 build.description = 'Build the AMP library';
 build.flags = {
@@ -74,6 +83,8 @@ build.flags = {
   extensions_from: 'Build only the extensions from the listed AMP(s)',
   noextensions: 'Build with no extensions',
   core_runtime_only: 'Build only the core runtime',
+  vendor_configs:
+    'Build 3p party vendor configuration files (defaults to true unless one of --core_runtime_only, --extensions, or --extensions_from is set)',
   coverage: 'Add code coverage instrumentation to JS files using istanbul',
   version_override: 'Override the version written to AMP_CONFIG',
   watch: 'Watch for changes in files, re-builds when detected',

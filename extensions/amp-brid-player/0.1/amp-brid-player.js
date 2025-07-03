@@ -1,6 +1,10 @@
 import {CONSENT_POLICY_STATE} from '#core/constants/consent-state';
 import {Deferred} from '#core/data-structures/promise';
-import {dispatchCustomEvent, removeElement} from '#core/dom';
+import {
+  dispatchCustomEvent,
+  getChildJsonConfig,
+  removeElement,
+} from '#core/dom';
 import {
   fullscreenEnter,
   fullscreenExit,
@@ -14,20 +18,21 @@ import {PauseHelper} from '#core/dom/video/pause-helper';
 import {Services} from '#service';
 import {installVideoManagerForDoc} from '#service/video-manager-impl';
 
+import {getData, listen} from '#utils/event-helper';
+import {dev, userAssert} from '#utils/log';
+
 import {
   getConsentPolicyInfo,
   getConsentPolicyState,
 } from '../../../src/consent';
-import {getData, listen} from '../../../src/event-helper';
 import {
   createFrameFor,
   mutedOrUnmutedEvent,
   originMatches,
   redispatch,
 } from '../../../src/iframe-video';
-import {dev, userAssert} from '../../../src/log';
 import {assertAbsoluteHttpOrHttpsUrl} from '../../../src/url';
-import {VideoEvents} from '../../../src/video-interface';
+import {VideoEvents_Enum} from '../../../src/video-interface';
 
 const TAG = 'amp-brid-player';
 
@@ -123,8 +128,8 @@ class AmpBridPlayer extends AMP.BaseElement {
       feedType = 'outstream';
     }
 
-    //Create iframe
-    const src =
+    // Create iframe
+    let src =
       'https://services.brid.tv/services/iframe/' +
       encodeURIComponent(feedType) +
       '/' +
@@ -136,6 +141,12 @@ class AmpBridPlayer extends AMP.BaseElement {
       '/0/' +
       itemsNum +
       '/?amp=1';
+
+    // Append child JSON config if supplied
+    try {
+      const customConfig = getChildJsonConfig(this.element);
+      src += '&cust_config=' + JSON.stringify(customConfig);
+    } catch (e) {}
 
     this.videoIframeSrc_ = assertAbsoluteHttpOrHttpsUrl(src);
 
@@ -351,13 +362,13 @@ class AmpBridPlayer extends AMP.BaseElement {
           break;
       }
       redispatch(element, params[3], {
-        'ready': VideoEvents.LOAD,
-        'play': VideoEvents.PLAYING,
-        'pause': VideoEvents.PAUSE,
-        'ended': VideoEvents.ENDED,
-        'adStart': VideoEvents.AD_START,
-        'adEnd': VideoEvents.AD_END,
-        'loadedmetadata': VideoEvents.LOADEDMETADATA,
+        'ready': VideoEvents_Enum.LOAD,
+        'play': VideoEvents_Enum.PLAYING,
+        'pause': VideoEvents_Enum.PAUSE,
+        'ended': VideoEvents_Enum.ENDED,
+        'adStart': VideoEvents_Enum.AD_START,
+        'adEnd': VideoEvents_Enum.AD_END,
+        'loadedmetadata': VideoEvents_Enum.LOADEDMETADATA,
       });
     }
 
@@ -482,6 +493,7 @@ class AmpBridPlayer extends AMP.BaseElement {
   }
 }
 
-AMP.extension(TAG, '0.1', (AMP) => {
-  AMP.registerElement(TAG, AmpBridPlayer);
+AMP.extension('amp-brid-player', '0.1', (AMP) => {
+  AMP.registerElement('amp-brid-player', AmpBridPlayer);
+  AMP.registerElement('amp-target-video-player', AmpBridPlayer);
 });

@@ -76,7 +76,6 @@ tags: {  # amp-cat
   extension_spec: {
     name: "amp-cat"
     version: "0.1"
-    version: "latest"
   }
   attr_lists: "common-extension-attrs"
 }
@@ -153,12 +152,11 @@ as well as a link to documentation on ampproject.org for all error messages.
 
 ```js
     version: "0.1"
-    version: "latest"
   }
 ```
 
 These fields define a list of all allowed version numbers. Currently, almost all
-extended components are at version `0.1`, and we also allow `latest` to be specified.
+extended components are at version `0.1`.
 
 The combination of the `version` and `name` fields of the
 `extension_spec` define the allowed values of the `src` attribute in the
@@ -412,7 +410,7 @@ In the document `<head>` section, add the extension `<script>` tag used by this 
 
 <pre>
 &lt;script async custom-element='<b>amp-cat</b>'
-     src='https://cdn.ampproject.org/v0/<b>amp-cat</b>-0.1.js'&gt;&lt;/scrip&gt;
+     src='https://cdn.ampproject.org/v0/<b>amp-cat</b>-0.1.js'&gt;&lt;/script&gt;
 </pre>
 
 **Add a working example of your tag**

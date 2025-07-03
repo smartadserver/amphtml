@@ -12,6 +12,10 @@ const {log, logLocalDev} = require('../common/logging');
 const LARGE_REFACTOR_THRESHOLD = 20;
 const GITHUB_BASE_PATH = 'https://github.com/ampproject/amphtml/blob/main/';
 
+// Certain sites do not like the default user agent string.
+const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+
 let filesIntroducedByPr;
 
 /**
@@ -101,15 +105,31 @@ function checkLinksInFile(file) {
     // Relative links start at the markdown file's path.
     baseUrl: 'file://' + path.dirname(path.resolve(file)),
     ignorePatterns: [
+      // Please note: This list is for links that are present many times in the repository.
+      // If a single link is failing, you can remove it directly using a surrounding
+      // comment directive markdown-link-check-disable / markdown-link-check-enable.
+
       // Localhost links don't work unless a `amp` server is running.
       {pattern: /localhost/},
       // codepen returns a 503 for these link checks
       {pattern: /https:\/\/codepen.*/},
+      // developers.google.com links are assumed to exist
+      {pattern: /https:\/\/developers.google.com\/.*/},
+      // anchor links should be ignored
+      {pattern: /^#/},
       // GitHub PRs and Issues can be assumed to exist
       {pattern: /https:\/\/github.com\/ampproject\/amphtml\/(pull|issue)\/.*/},
       // Templated links are merely used to generate other markdown files.
       {pattern: /\$\{[a-z]*\}/},
       {pattern: /https:.*?__component_name\w*__/},
+    ],
+    httpHeaders: [
+      {
+        urls: ['https://'],
+        headers: {
+          'User-Agent': USER_AGENT,
+        },
+      },
     ],
   };
 

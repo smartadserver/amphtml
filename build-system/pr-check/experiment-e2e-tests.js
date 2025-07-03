@@ -5,16 +5,14 @@
  */
 
 const {
-  TEST_FILES_LIST_FILE_NAME,
+  FILELIST_PATH,
   generateCircleCiShardTestFileList,
   skipDependentJobs,
-  timedExecOrDie,
   timedExecOrThrow,
 } = require('./utils');
 const {e2eTestPaths} = require('../test-configs/config');
 const {experiment} = require('minimist')(process.argv.slice(2));
 const {getExperimentConfig} = require('../common/utils');
-const {isPushBuild} = require('../common/ci');
 const {runCiJob} = require('./ci-job');
 const {Targets, buildTargetsInclude} = require('./build-targets');
 
@@ -28,18 +26,13 @@ function runExperimentTests(config) {
   try {
     const defineFlag = `--define_experiment_constant ${config.define_experiment_constant}`;
     const experimentFlag = `--experiment ${experiment}`;
-    const reportFlag = isPushBuild() ? '--report' : '';
     generateCircleCiShardTestFileList(e2eTestPaths);
     timedExecOrThrow(
-      `amp e2e --nobuild --minified --headless ${experimentFlag} ${defineFlag} ${reportFlag} --filelist ${TEST_FILES_LIST_FILE_NAME}`
+      `amp e2e --nobuild --minified --headless ${experimentFlag} ${defineFlag} --filelist ${FILELIST_PATH}`
     );
   } catch (e) {
     if (e.status) {
       process.exitCode = e.status;
-    }
-  } finally {
-    if (isPushBuild()) {
-      timedExecOrDie('amp test-report-upload');
     }
   }
 }

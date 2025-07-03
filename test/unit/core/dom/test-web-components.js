@@ -1,7 +1,9 @@
 import {
-  ShadowDomVersion,
+  ShadowDomVersion_Enum,
   getShadowDomSupportedVersion,
+  isShadowCssSupported,
   isShadowDomSupported,
+  setShadowCssSupportedForTesting,
   setShadowDomSupportedVersionForTesting,
 } from '#core/dom/web-components';
 
@@ -31,7 +33,7 @@ describes.realWin('Web Components spec', {}, (env) => {
       win.Element.prototype.attachShadow = undefined;
 
       expect(getShadowDomSupportedVersion(win.Element)).to.equal(
-        ShadowDomVersion.NONE
+        ShadowDomVersion_Enum.NONE
       );
     });
 
@@ -41,7 +43,7 @@ describes.realWin('Web Components spec', {}, (env) => {
         !!win.Element.prototype.attachShadow
       ) {
         expect(getShadowDomSupportedVersion(win.Element)).to.equal(
-          ShadowDomVersion.V1
+          ShadowDomVersion_Enum.V1
         );
       }
     });
@@ -51,9 +53,41 @@ describes.realWin('Web Components spec', {}, (env) => {
         win.Element.prototype.attachShadow = undefined;
 
         expect(getShadowDomSupportedVersion(win.Element)).to.equal(
-          ShadowDomVersion.V0
+          ShadowDomVersion_Enum.V0
         );
       }
+    });
+  });
+
+  describe('Shadow CSS', () => {
+    beforeEach(() => {
+      setShadowCssSupportedForTesting(undefined);
+    });
+
+    it('should report whether native shadow css supported', () => {
+      const shadowDomV0 = !!win.Element.prototype.createShadowRoot;
+      const shadowDomV1 = !!win.Element.prototype.attachShadow;
+      expect(isShadowCssSupported()).to.equal(shadowDomV0 || shadowDomV1);
+    });
+
+    it('should report whether native shadow css supported using proxied Elements', () => {
+      const shadowDomV0 = !!win.Element.prototype.createShadowRoot;
+      const shadowDomV1 = !!win.Element.prototype.attachShadow;
+
+      if (shadowDomV0) {
+        const {createShadowRoot} = win.Element.prototype;
+
+        win.Element.prototype.createShadowRoot = (...args) =>
+          createShadowRoot(...args);
+      }
+
+      if (shadowDomV1) {
+        const {attachShadow} = win.Element.prototype;
+
+        win.Element.prototype.attachShadow = (...args) => attachShadow(...args);
+      }
+
+      expect(isShadowCssSupported()).to.equal(shadowDomV0 || shadowDomV1);
     });
   });
 });

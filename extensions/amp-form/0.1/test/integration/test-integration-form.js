@@ -1,13 +1,14 @@
-import {AmpEvents} from '#core/constants/amp-events';
+import {AmpEvents_Enum} from '#core/constants/amp-events';
 
 import {Services} from '#service';
 import {stubElementsForDoc} from '#service/custom-element-registry';
 import {registerExtendedTemplateForDoc} from '#service/template-impl';
 
+import {listenOncePromise} from '#utils/event-helper';
+
 import {poll} from '#testing/iframe';
 
 import {installGlobalSubmitListenerForDoc} from '../../../../../src/document-submit';
-import {listenOncePromise} from '../../../../../src/event-helper';
 import {AmpMustache} from '../../../../amp-mustache/0.1/amp-mustache';
 import {AmpForm, AmpFormService} from '../../amp-form';
 
@@ -163,8 +164,7 @@ describes.realWin(
       });
     });
 
-    // TODO(cvializ, #19647): Broken on SL Chrome 71.
-    describeChrome.skip('Submit xhr-POST', function () {
+    describeChrome.run('Submit xhr-POST', function () {
       this.timeout(RENDER_TIMEOUT);
 
       it('should submit and render success', () => {
@@ -183,7 +183,7 @@ describes.realWin(
         const fetch = poll('submit request sent', () =>
           ampForm.xhrSubmitPromiseForTesting()
         );
-        const render = listenOncePromise(form, AmpEvents.DOM_UPDATE);
+        const render = listenOncePromise(form, AmpEvents_Enum.DOM_UPDATE);
 
         form.dispatchEvent(new Event('submit'));
         return fetch
@@ -219,7 +219,7 @@ describes.realWin(
           'submit request sent',
           () => fetchSpy.returnValues[0]
         );
-        const render = listenOncePromise(form, AmpEvents.DOM_UPDATE);
+        const render = listenOncePromise(form, AmpEvents_Enum.DOM_UPDATE);
 
         form.dispatchEvent(new Event('submit'));
         return fetch.then(
@@ -240,8 +240,7 @@ describes.realWin(
       });
     });
 
-    // TODO(cvializ, #19647): Broken on SL Chrome 71.
-    describeChrome.skip('Submit xhr-GET', function () {
+    describeChrome.run('Submit xhr-GET', function () {
       this.timeout(RENDER_TIMEOUT);
 
       it('should submit and render success', () => {
@@ -261,7 +260,7 @@ describes.realWin(
         const fetch = poll('submit request sent', () =>
           ampForm.xhrSubmitPromiseForTesting()
         );
-        const render = listenOncePromise(form, AmpEvents.DOM_UPDATE);
+        const render = listenOncePromise(form, AmpEvents_Enum.DOM_UPDATE);
 
         form.dispatchEvent(new Event('submit'));
         return fetch
@@ -298,7 +297,7 @@ describes.realWin(
           'submit request sent',
           () => fetchSpy.returnValues[0]
         );
-        const render = listenOncePromise(form, AmpEvents.DOM_UPDATE);
+        const render = listenOncePromise(form, AmpEvents_Enum.DOM_UPDATE);
 
         form.dispatchEvent(new Event('submit'));
         return fetch.then(
@@ -319,8 +318,7 @@ describes.realWin(
       });
     });
 
-    // TODO(cvializ, #19647): Broken on SL Chrome 71.
-    describeChrome.skip('Submit result message', () => {
+    describeChrome.run('Submit result message', () => {
       it('should render messages with or without a template', () => {
         // Stubbing timeout to catch async-thrown errors and expect
         // them. These catch errors thrown inside the catch-clause of the
@@ -360,7 +358,7 @@ describes.realWin(
             expect(rendered.length).to.equal(0);
 
             // Any amp elements inside the message should be layed out.
-            const layout = listenOncePromise(form, AmpEvents.LOAD_START);
+            const layout = listenOncePromise(form, AmpEvents_Enum.LOAD_START);
             return layout.then(() => {
               const img = form.querySelector('amp-img img');
               expect(img.src).to.contain('/examples/img/ampicon.png');

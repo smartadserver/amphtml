@@ -16,11 +16,12 @@
 
 import {parseQueryString} from '#core/types/string/url';
 
+import {initLogConstructor, setReportError, user} from '#utils/log';
+
 import {TAG} from './vars';
 import {WindowMessenger} from './window-messenger';
 
 import {reportError} from '../../../src/error-reporting';
-import {initLogConstructor, setReportError, user} from '../../../src/log';
 import {getMode} from '../../../src/mode';
 
 initLogConstructor();
@@ -344,7 +345,7 @@ export class AmpWebPushHelperFrame {
   }
 
   /**
-   * Returns a Promise that is resolved when the the page controlling the
+   * Returns a Promise that is resolved when the page controlling the
    * service worker is activated. This Promise never rejects.
    *
    * @return {Promise}

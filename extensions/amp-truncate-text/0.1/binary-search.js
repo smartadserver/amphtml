@@ -1,4 +1,4 @@
-import {devAssert} from '../../../src/log';
+import {devAssert} from '#utils/log';
 
 /**
  * When no matching index is found, whether to stop on the next or previous
@@ -83,9 +83,9 @@ export function binarySearch(
   const index = !isNaN(prefIndex)
     ? prefIndex
     : // If we stopped, high is either less than or equal to low. So if we have
-    // a high preference, actually return the current value of low.
-    preference == BinarySearchPreference.NEXT
-    ? low
-    : high;
+      // a high preference, actually return the current value of low.
+      preference == BinarySearchPreference.NEXT
+      ? low
+      : high;
   return -(index + 1);
 }

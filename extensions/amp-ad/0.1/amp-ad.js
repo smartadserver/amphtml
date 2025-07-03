@@ -13,14 +13,18 @@
  * limitations under the License.
  */
 
-import {AmpAd3PImpl} from './amp-ad-3p-impl';
-import {AmpAdCustom} from './amp-ad-custom';
-import {CSS} from '../../../build/amp-ad-0.1.css';
-import {Services} from '#service';
-import {adConfig} from '#ads/_config';
 import {getA4ARegistry} from '#ads/_a4a-config';
+import {adConfig} from '#ads/_config';
+
 import {hasOwn} from '#core/types/object';
-import {userAssert} from '../../../src/log';
+
+import {Services} from '#service';
+
+import {userAssert} from '#utils/log';
+
+import {AmpAd3PImpl} from './amp-ad-3p-impl';
+
+import {CSS} from '../../../build/amp-ad-0.1.css';
 
 /**
  * Construct ad network type-specific tag and script name.  Note that this
@@ -56,16 +60,10 @@ export class AmpAd extends AMP.BaseElement {
       : Promise.resolve();
     const type = this.element.getAttribute('type');
     return consent.then(() => {
-      const isCustom = type === 'custom';
       userAssert(
-        isCustom || hasOwn(adConfig, type) || hasOwn(a4aRegistry, type),
+        hasOwn(adConfig, type) || hasOwn(a4aRegistry, type),
         `Unknown ad type "${type}"`
       );
-
-      // Check for the custom ad type (no ad network, self-service)
-      if (isCustom) {
-        return new AmpAdCustom(this.element);
-      }
 
       this.win.ampAdSlotIdCounter = this.win.ampAdSlotIdCounter || 0;
       const slotId = this.win.ampAdSlotIdCounter++;

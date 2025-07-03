@@ -306,6 +306,36 @@ window.adpushup.initAmp = function (
   extras
 ) {};
 
+// andbeyond.js
+window.andbeyond = {};
+window.andbeyond.initAmp = function (
+  global,
+  width,
+  height,
+  siteid,
+  slotpath,
+  totalampslots,
+  jsontargeting,
+  extras
+) {};
+
+// affinity.js
+window.affinity = {};
+window.affinity.initAMP = function (global, data) {};
+data.width;
+data.height;
+data.adtype;
+data.adslot;
+data.slot;
+data.affLayout;
+data.multiSize;
+data.jsontargeting;
+data.affSticky;
+data.affTitle;
+data.affJson;
+data.affRtcConfig;
+data.extras;
+
 // adreactor.js
 data.zid;
 data.pid;
@@ -521,6 +551,9 @@ data.local;
 data.enablemraid;
 data.jsplayer;
 
+// momagic
+window.momagicAmpInit;
+
 // nativo.js
 var PostRelease;
 PostRelease.Start;
@@ -563,6 +596,12 @@ data.dfpSlot;
 data.nc;
 data.auid;
 
+// piberica.js
+data.height;
+data.publisher;
+data.slot;
+data.width;
+
 // pixels.js
 var pixelsAd;
 var pixelsAMPAd;
@@ -603,6 +642,19 @@ data.section;
 // pulsepoint.js
 window.PulsePointHeaderTag;
 
+// r9x.js
+window.r9x = {};
+window.r9x.initAmp = function (
+  global,
+  width,
+  height,
+  siteid,
+  slotpath,
+  totalampslots,
+  jsontargeting,
+  extras
+) {};
+
 // rubicon.js
 data.method;
 data.width;
@@ -615,6 +667,9 @@ data.size;
 data.site;
 data.zone;
 data.callback;
+
+// seedtag.js
+data.adunitId;
 
 // sharethrough.js
 data.pkey;
@@ -673,9 +728,6 @@ data.extraParams;
 data.slot.setVisibility;
 data.slot.setTargeting;
 data.slot.setExtraParameters;
-
-// verizonmedia.js
-window.jacData;
 
 // webediads.js
 var wads;

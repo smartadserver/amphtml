@@ -13,14 +13,18 @@ import {once} from '#core/types/function';
 
 import {Services} from '#service';
 
+import {createCustomEvent, listen} from '#utils/event-helper';
+import {dev, devAssert} from '#utils/log';
+
 import {applyBreakpointClassname} from './breakpoints';
 import {VideoDockingEvents, pointerCoords} from './events';
 import {HtmlLiteralTagDef} from './html';
 import {Timeout} from './timeout';
 
-import {createCustomEvent, listen} from '../../../src/event-helper';
-import {dev, devAssert} from '../../../src/log';
-import {PlayingStates, VideoEvents} from '../../../src/video-interface';
+import {
+  PlayingStates_Enum,
+  VideoEvents_Enum,
+} from '../../../src/video-interface';
 
 /**
  * A single controls set can be displayed at a time on the controls layer.
@@ -69,75 +73,67 @@ function swap(a, b) {
  * @return {!Element}
  * @private
  */
-const renderDockedOverlay = (html) =>
-  html` <div class="i-amphtml-video-docked-overlay" hidden></div> `;
+const renderDockedOverlay = (html) => html`
+  <div class="i-amphtml-video-docked-overlay" hidden></div>
+`;
 
 /**
  * @param {!HtmlLiteralTagDef} html
  * @return {!Element}
  * @private
  */
-const renderControls = (html) =>
-  html`
-    <div class="amp-video-docked-controls" hidden>
-      <div
-        class="amp-video-docked-main-button-group
+const renderControls = (html) => html`
+  <div class="amp-video-docked-controls" hidden>
+    <div
+      class="amp-video-docked-main-button-group
                amp-video-docked-control-set-playback"
-      >
-        <div class="amp-video-docked-button-group">
-          <div
-            role="button"
-            ref="playButton"
-            class="amp-video-docked-play"
-          ></div>
-          <div
-            role="button"
-            ref="pauseButton"
-            class="amp-video-docked-pause"
-          ></div>
-        </div>
-        <div class="amp-video-docked-button-group">
-          <div
-            role="button"
-            ref="muteButton"
-            class="amp-video-docked-mute"
-          ></div>
-          <div
-            role="button"
-            ref="unmuteButton"
-            class="amp-video-docked-unmute"
-          ></div>
-        </div>
-        <div class="amp-video-docked-button-group">
-          <div
-            role="button"
-            ref="fullscreenButton"
-            class="amp-video-docked-fullscreen"
-          ></div>
-        </div>
-      </div>
-      <div
-        class="amp-video-docked-main-button-group
-               amp-video-docked-control-set-scroll-back"
-        hidden
-      >
-        <div class="amp-video-docked-button-group">
-          <div
-            role="button"
-            ref="scrollBackButton"
-            class="amp-video-docked-scroll-back"
-          ></div>
-        </div>
-      </div>
-      <div class="amp-video-docked-button-dismiss-group" ref="dismissContainer">
+    >
+      <div class="amp-video-docked-button-group">
+        <div role="button" ref="playButton" class="amp-video-docked-play"></div>
         <div
           role="button"
-          ref="dismissButton"
-          class="amp-video-docked-dismiss"
+          ref="pauseButton"
+          class="amp-video-docked-pause"
+        ></div>
+      </div>
+      <div class="amp-video-docked-button-group">
+        <div role="button" ref="muteButton" class="amp-video-docked-mute"></div>
+        <div
+          role="button"
+          ref="unmuteButton"
+          class="amp-video-docked-unmute"
+        ></div>
+      </div>
+      <div class="amp-video-docked-button-group">
+        <div
+          role="button"
+          ref="fullscreenButton"
+          class="amp-video-docked-fullscreen"
         ></div>
       </div>
     </div>
-  `;
+    <div
+      class="amp-video-docked-main-button-group
+               amp-video-docked-control-set-scroll-back"
+      hidden
+    >
+      <div class="amp-video-docked-button-group">
+        <div
+          role="button"
+          ref="scrollBackButton"
+          class="amp-video-docked-scroll-back"
+        ></div>
+      </div>
+    </div>
+    <div class="amp-video-docked-button-dismiss-group" ref="dismissContainer">
+      <div
+        role="button"
+        ref="dismissButton"
+        class="amp-video-docked-dismiss"
+      ></div>
+    </div>
+  </div>
+`;
 
 export class Controls {
   /** @param {!../../../src/service/ampdoc-impl.AmpDoc} ampdoc */
@@ -299,16 +295,16 @@ export class Controls {
         this.hideOnTimeout(TIMEOUT_AFTER_INTERACTION)
       ),
 
-      listen(element, VideoEvents.PLAYING, () => this.onPlay_()),
-      listen(element, VideoEvents.PAUSE, () => this.onPause_()),
-      listen(element, VideoEvents.MUTED, () => this.onMute_()),
-      listen(element, VideoEvents.UNMUTED, () => this.onUnmute_()),
+      listen(element, VideoEvents_Enum.PLAYING, () => this.onPlay_()),
+      listen(element, VideoEvents_Enum.PAUSE, () => this.onPause_()),
+      listen(element, VideoEvents_Enum.MUTED, () => this.onMute_()),
+      listen(element, VideoEvents_Enum.UNMUTED, () => this.onUnmute_()),
 
-      listen(element, VideoEvents.AD_START, () =>
+      listen(element, VideoEvents_Enum.AD_START, () =>
         this.useControlSet_(ControlSet.SCROLL_BACK)
       ),
 
-      listen(element, VideoEvents.AD_END, () =>
+      listen(element, VideoEvents_Enum.AD_END, () =>
         this.useControlSet_(ControlSet.PLAYBACK)
       )
     );
@@ -404,7 +400,8 @@ export class Controls {
 
     const isRollingAd = manager.isRollingAd(video);
     const isMuted = manager.isMuted(video);
-    const isPlaying = manager.getPlayingState(video) !== PlayingStates.PAUSED;
+    const isPlaying =
+      manager.getPlayingState(video) !== PlayingStates_Enum.PAUSED;
 
     const {container, overlay} = this;
 

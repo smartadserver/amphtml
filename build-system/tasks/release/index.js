@@ -32,12 +32,11 @@ let DistFlavorDef;
 const argv = require('minimist')(process.argv.slice(2));
 /** @type {ExperimentsConfigDef} */
 const experimentsConfig = require('../../global-configs/experiments-config.json');
-const fetch = require('node-fetch');
 const fs = require('fs-extra');
 const klaw = require('klaw');
 const path = require('path');
 const tar = require('tar');
-const {cyan, green} = require('kleur/colors');
+const {cyan, green, red, yellow} = require('kleur/colors');
 const {execOrDie} = require('../../common/exec');
 const {log} = require('../../common/logging');
 const {MINIFIED_TARGETS} = require('../prepend-global');
@@ -116,6 +115,34 @@ const CHANNEL_CONFIGS = {
   '25': {type: 'experimentC', configBase: 'prod'}, // Spec name: 'inabox-experimentC'
 };
 
+/** @type {ReadonlySet<string>} */
+const V0_DEDUP_RTV_PREFIXES = new Set([
+  '00',
+  '02',
+  '03',
+  '04',
+  '05',
+  '20',
+  '22',
+  '24',
+]);
+
+/**
+ * Path to custom flavors config, see: build-system/global-configs/README.md
+ */
+const CUSTOM_FLAVORS_CONFIG_PATH = path.resolve(
+  __dirname,
+  '../../global-configs/custom-flavors-config.json'
+);
+
+/**
+ * Path to custom overlay config, see: build-system/global-configs/README.md
+ */
+const CUSTOM_OVERLAY_CONFIG_PATH = path.resolve(
+  __dirname,
+  '../../global-configs/custom-config.json'
+);
+
 /**
  * Prints a separator line so logs are easy to read.
  */
@@ -141,11 +168,27 @@ async function prepareEnvironment_(outputDir, tempDir) {
  * Discovers which AMP flavors are defined in the current working directory.
  *
  * The returned list of flavors will always contain the base flavor, and any
- * defined experiments in ../../global-configs/experiments-config.json.
+ * defined experiments in ../../global-configs/experiments-config.json, as well
+ * as custom flavors in ../../global-configs/custom-flavors-config.json.
  *
  * @return {!Array<!DistFlavorDef>} list of AMP flavors to build.
  */
 function discoverDistFlavors_() {
+  let customFlavorsConfig = [];
+  if (fs.existsSync(CUSTOM_FLAVORS_CONFIG_PATH)) {
+    const flavorsFilename = path.basename(CUSTOM_FLAVORS_CONFIG_PATH);
+    try {
+      customFlavorsConfig = require(CUSTOM_FLAVORS_CONFIG_PATH);
+      log(
+        yellow('Notice:'),
+        'release flavors supplemented by',
+        cyan(flavorsFilename)
+      );
+    } catch (ex) {
+      log(red('Could not load custom flavors from:'), cyan(flavorsFilename));
+    }
+  }
+
   const experimentConfigDefs = Object.entries(experimentsConfig);
   const distFlavors = [
     BASE_FLAVOR_CONFIG,
@@ -171,6 +214,7 @@ function discoverDistFlavors_() {
           ...experimentConfig,
         })
       ),
+    ...customFlavorsConfig,
   ].filter(
     // If --flavor is defined, filter out the rest.
     ({flavorType}) => !argv.flavor || flavorType == argv.flavor
@@ -200,11 +244,11 @@ function discoverDistFlavors_() {
  * @return {Promise<void>}
  */
 async function compileDistFlavors_(flavorType, command, tempDir) {
-  // TODO(danielrozenberg): remove undefined case when the release automation platform explicitly handles it.
-  if (argv.esm === undefined) {
-    command = `${command} --esm && ${command}`;
-  } else if (argv.esm) {
+  if (argv.esm) {
     command += ' --esm';
+  }
+  if (argv.full_sourcemaps) {
+    command += ' --full_sourcemaps';
   }
   log('Compiling flavor', green(flavorType), 'using', cyan(command));
 
@@ -274,10 +318,19 @@ async function fetchAmpSw_(flavorType, tempDir) {
     filter: (path) => path.startsWith('package/dist'),
     strip: 2, // to strip "package/dist/".
   });
-  (await fetch(ampSwTarballUrl)).body.pipe(tarWritableStream);
-  await new Promise((resolve) => {
-    tarWritableStream.on('end', resolve);
-  });
+  const tarballResponse = await fetch(ampSwTarballUrl);
+  if (!tarballResponse.body) {
+    throw new Error(`Failed to fetch ${ampSwTarballUrl}`);
+  }
+  const reader = tarballResponse.body.getReader();
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) {
+      break;
+    }
+    tarWritableStream.write(value);
+  }
+  tarWritableStream.end();
 
   await fs.copy(ampSwTempDir, path.join(tempDir, flavorType, 'dist/sw'));
 
@@ -325,6 +378,27 @@ async function populateOrgCdn_(flavorType, rtvPrefixes, tempDir, outputDir) {
     );
   }
   await Promise.all(rtvCopyingPromises);
+
+  logSeparator_();
+}
+
+/**
+ * Removes the V0 directory from all RTVs except for the Stable (01-prefixed) channel,
+ *
+ * @param {!Array<string>} rtvPrefixes list of 2-digit RTV prefixes to generate.
+ * @param {string} outputDir full directory path to emplace artifacts in.
+ * @return {Promise<void>}
+ */
+async function dedupV0_(rtvPrefixes, outputDir) {
+  await Promise.all(
+    rtvPrefixes
+      .filter((rtvPrefix) => V0_DEDUP_RTV_PREFIXES.has(rtvPrefix))
+      .map((rtvPrefix) => {
+        const rtvNumber = `${rtvPrefix}${VERSION}`;
+        const v0Path = path.join(outputDir, 'org-cdn/rtv', rtvNumber, 'v0');
+        return fs.rm(v0Path, {recursive: true});
+      })
+  );
 
   logSeparator_();
 }
@@ -382,25 +456,37 @@ async function prependConfig_(outputDir) {
   for (const [rtvPrefix, channelConfig] of activeChannels) {
     const rtvNumber = `${rtvPrefix}${VERSION}`;
     const rtvPath = path.join(outputDir, 'org-cdn/rtv', rtvNumber);
+    let overlayConfig = {};
+    if (fs.existsSync(CUSTOM_OVERLAY_CONFIG_PATH)) {
+      const overlayFilename = path.basename(CUSTOM_OVERLAY_CONFIG_PATH);
+      try {
+        overlayConfig = require(CUSTOM_OVERLAY_CONFIG_PATH);
+        log(
+          yellow('Notice:'),
+          cyan(channelConfig.configBase),
+          'config overlaid with',
+          cyan(overlayFilename)
+        );
+      } catch (ex) {
+        log(red('Could not apply overlay from'), cyan(overlayFilename));
+      }
+    }
+
     const channelPartialConfig = {
       v: rtvNumber,
       type: channelConfig.type,
-      ...require(`../../global-configs/${channelConfig.configBase}-config.json`),
+      ...require(
+        `../../global-configs/${channelConfig.configBase}-config.json`
+      ),
+      ...overlayConfig,
     };
+
     // Mapping of entry file names to a dictionary of AMP_CONFIG additions.
-    const targetsToConfig = MINIFIED_TARGETS.flatMap((minifiedTarget) => {
-      const targets = [];
-      // TODO(danielrozenberg): remove undefined case when the release automation platform explicitly handles it.
-      if (!argv.esm) {
-        // For explicit --no-esm or when no ESM flag is passed.
-        targets.push({file: `${minifiedTarget}.js`, config: {}});
-      }
-      if (argv.esm === undefined || argv.esm) {
-        // For explicit --esm or when no ESM flag is passed.
-        targets.push({file: `${minifiedTarget}.mjs`, config: {esm: 1}});
-      }
-      return targets;
-    });
+    const targetsToConfig = MINIFIED_TARGETS.map((minifiedTarget) =>
+      argv.esm
+        ? {file: `${minifiedTarget}.mjs`, config: {esm: 1}}
+        : {file: `${minifiedTarget}.js`, config: {}}
+    );
 
     allPrependPromises.push(
       ...targetsToConfig.map(async (target) => {
@@ -410,7 +496,8 @@ async function prependConfig_(outputDir) {
           ...target.config,
         });
 
-        const contents = await fs.readFile(targetPath, 'utf-8');
+        const contents = await fs.readFile(targetPath, 'utf8');
+
         return fs.writeFile(
           targetPath,
           `self.AMP_CONFIG=${channelConfig};/*AMP_CONFIG*/${contents}`
@@ -439,13 +526,13 @@ async function populateNetWildcard_(tempDir, outputDir) {
 }
 
 /**
- * Cleans are deletes the temp directory.
+ * Cleans and deletes the temp directory.
  *
  * @param {string} tempDir full directory path to temporary working directory.
  * @return {Promise<void>}
  */
 async function cleanup_(tempDir) {
-  await fs.rmdir(tempDir, {recursive: true});
+  await fs.rm(tempDir, {recursive: true});
 
   logSeparator_();
 }
@@ -480,6 +567,11 @@ async function release() {
 
     log('Copying from temporary directory to', cyan('org-cdn'));
     await populateOrgCdn_(flavorType, rtvPrefixes, tempDir, outputDir);
+
+    if (argv.dedup_v0) {
+      log('Deduplicating', cyan('v0/'), 'directory...');
+      await dedupV0_(rtvPrefixes, outputDir);
+    }
   }
 
   log('Generating', cyan('files.txt'), 'files in', cyan('org-cdn/rtv/*'));
@@ -511,7 +603,8 @@ release.flags = {
     'Directory path to emplace release files (defaults to "./release")',
   'flavor':
     'Limit this release build to a single flavor (can be used to split the release work across multiple build machines)',
-  'esm':
-    // TODO(danielrozenberg): remove undefined case when the release automation platform explicitly handles it.
-    'Compile with --esm if true, without --esm if false, and with + without --esm if left unset',
+  'esm': 'Compile with --esm if true, without --esm if false or unspecified',
+  'full_sourcemaps': 'Include source code content in sourcemaps',
+  'dedup_v0':
+    'Removes duplicate copies of the v0/ subdirectory when they are the same files as those in the Stable (01-prefixed) channel',
 };

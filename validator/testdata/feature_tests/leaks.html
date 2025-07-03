@@ -36,6 +36,11 @@
 <meta http-equiv="refresh" content="10; url=http://leaking.via/meta-refresh">
 
 <!--
+%Redirects (empty attribute)
+-->
+<meta = http-equiv="refresh" content="10; url=http://leaking.via/meta-refresh">
+
+<!--
 %CSP
 -->
 <meta http-equiv="Content-Security-Policy" content="script-src 'self'; report-uri http://leaking.via/meta-csp-report-uri">
@@ -83,7 +88,10 @@
 <picture>
     <img srcset="https://leaking.via/picture-img-srcset">
 </picture>
+
+<!-- Warning: There are different results between JS and CPP validators for this -->
 <img srcset=",,,,,https://leaking.via/img-srcset">
+
 <img src="#" longdesc="https://leaking.via/img-longdesc">
 <!-- longdesc works on Firefox but requires right-click, "View Description" -->
 

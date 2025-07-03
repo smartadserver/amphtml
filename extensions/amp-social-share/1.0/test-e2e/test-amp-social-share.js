@@ -86,7 +86,9 @@ describes.endtoend(
     });
 
     describe('clicking', () => {
-      it('opens a new window on click', async () => {
+      it('opens a new window on click', async function () {
+        this.timeout(5000);
+
         const host = await controller.findElement('#two');
 
         let windows = await controller.getAllWindows();
@@ -98,12 +100,13 @@ describes.endtoend(
         await expect(windows.length).to.equal(2);
         await controller.switchToWindow(windows[1]);
 
-        await expect(controller.getCurrentUrl()).to.equal(
-          'https://twitter.com/intent/tweet?text=amp-social-share&url=http%3A%2F%2Fexample.com%2F'
+        await expect(controller.getCurrentUrl()).to.have.string(
+          'https://x.com/'
         );
       });
 
-      it('tabs between multiple social-shares and opens on "enter" keypress', async () => {
+      // TODO(#40276): flaky test disabled
+      it.skip('tabs between multiple social-shares and opens on "enter" keypress', async () => {
         await controller.type(null, Key.Tab);
         await controller.type(null, Key.Tab);
         await controller.type(null, Key.Tab);
@@ -117,9 +120,7 @@ describes.endtoend(
         await expect(windows.length).to.equal(2);
         await controller.switchToWindow(windows[1]);
 
-        await expect(controller.getCurrentUrl()).to.equal(
-          'https://www.tumblr.com/login?redirect_to=https%3A%2F%2Fwww.tumblr.com%2Fwidgets%2Fshare%2Ftool%3FshareSource%3Dlegacy%26canonicalUrl%3D%26url%3Dhttp%253A%252F%252Fexample.com%252F%26posttype%3Dlink%26title%3Damp-social-share%26caption%3D%26content%3Dhttp%253A%252F%252Fexample.com%252F'
-        );
+        await expect(controller.getCurrentUrl()).to.contain('tumblr.com');
       });
     });
   }

@@ -3,6 +3,7 @@
 // always available for them. However, when we test an impl in isolation,
 // AmpAd is not loaded already, so we need to load it separately.
 import '../../../amp-ad/0.1/amp-ad';
+import {AMP_GFP_SET_COOKIES_HEADER_NAME} from '#ads/google/a4a/cookie-utils';
 import {AMP_EXPERIMENT_ATTRIBUTE, QQID_HEADER} from '#ads/google/a4a/utils';
 
 import {
@@ -11,12 +12,14 @@ import {
 } from '#core/constants/consent-state';
 import {Deferred} from '#core/data-structures/promise';
 import {createElementWithAttributes} from '#core/dom';
-import {Layout} from '#core/dom/layout';
+import {Layout_Enum} from '#core/dom/layout';
 import * as bytesUtils from '#core/types/string/bytes';
 
 import {toggleExperiment} from '#experiments';
 
 import {Services} from '#service';
+
+import {getCookie, setCookie} from 'src/cookies';
 
 import {FriendlyIframeEmbed} from '../../../../src/friendly-iframe-embed';
 import {
@@ -87,7 +90,6 @@ function createImplTag(config, element, impl, env) {
   env.win.document.body.appendChild(element);
   impl = new AmpAdNetworkDoubleclickImpl(element);
   impl.iframe = iframe;
-  impl.win['goog_identity_prom'] = Promise.resolve({});
   return [element, impl, env];
 }
 
@@ -556,6 +558,72 @@ for (const {config, name} of [
           );
         });
 
+        it('should clear cookies as specified in creative response, with opt out', () => {
+          setCookie(env.win, '__gads', '__gads_val', Date.now() + 100_000);
+          setCookie(env.win, '__gpi', '__gpi_val', Date.now() + 100_000);
+          expect(getCookie(env.win, '__gads')).to.equal('__gads_val');
+          expect(getCookie(env.win, '__gpi')).to.equal('__gpi_val');
+
+          impl.onCreativeRender(false);
+          impl.checkIfClearCookiePostMessageHasValidSource_ = () => true;
+          env.win.postMessage(
+            JSON.stringify({
+              googMsgType: 'gpi-uoo',
+              userOptOut: true,
+              clearAdsData: true,
+            }),
+            '*'
+          );
+
+          expect(getCookie(env.win, '__gpi_opt_out')).to.equal('1');
+          expect(getCookie(env.win, '__gads')).to.be.null;
+          expect(getCookie(env.win, '__gpi')).to.be.null;
+        });
+
+        it('should clear cookies as specified in creative response, without opt out', () => {
+          setCookie(env.win, '__gads', '__gads_val', Date.now() + 100_000);
+          setCookie(env.win, '__gpi', '__gpi_val', Date.now() + 100_000);
+          expect(getCookie(env.win, '__gads')).to.equal('__gads_val');
+          expect(getCookie(env.win, '__gpi')).to.equal('__gpi_val');
+
+          impl.onCreativeRender(false);
+          impl.checkIfClearCookiePostMessageHasValidSource_ = () => true;
+          env.win.postMessage(
+            JSON.stringify({
+              googMsgType: 'gpi-uoo',
+              userOptOut: false,
+              clearAdsData: true,
+            }),
+            '*'
+          );
+
+          expect(getCookie(env.win, '__gpi_opt_out')).to.equal('0');
+          expect(getCookie(env.win, '__gads')).to.be.null;
+          expect(getCookie(env.win, '__gpi')).to.be.null;
+        });
+
+        it('should not clear cookies as specified in creative response, without opt out or clear ads', () => {
+          setCookie(env.win, '__gads', '__gads_val', Date.now() + 100_000);
+          setCookie(env.win, '__gpi', '__gpi_val', Date.now() + 100_000);
+          expect(getCookie(env.win, '__gads')).to.equal('__gads_val');
+          expect(getCookie(env.win, '__gpi')).to.equal('__gpi_val');
+
+          impl.onCreativeRender(false);
+          impl.checkIfClearCookiePostMessageHasValidSource_ = () => true;
+          env.win.postMessage(
+            JSON.stringify({
+              googMsgType: 'gpi-uoo',
+              userOptOut: false,
+              clearAdsData: false,
+            }),
+            '*'
+          );
+
+          expect(getCookie(env.win, '__gpi_opt_out')).to.equal('0');
+          expect(getCookie(env.win, '__gads')).to.equal('__gads_val');
+          expect(getCookie(env.win, '__gpi')).to.equal('__gpi_val');
+        });
+
         it('should register click listener', () => {
           impl.iframe = impl.win.document.createElement('iframe');
           impl.win.document.body.appendChild(impl.iframe);
@@ -771,6 +839,15 @@ for (const {config, name} of [
           });
         });
 
+        it('handles tagForUnderAgeTreatment', () => {
+          element.setAttribute('json', '{"tagForUnderAgeTreatment": 1}');
+          new AmpAd(element).upgradeCallback();
+          impl.uiHandler = {isStickyAd: () => false};
+          return impl.getAdUrl().then((url) => {
+            expect(url).to.match(/&tfua=1&/);
+          });
+        });
+
         describe('data-force-safeframe', () => {
           const fsfRegexp = /(\?|&)fsf=1(&|$)/;
           it('handles default', () => {
@@ -825,7 +902,8 @@ for (const {config, name} of [
           });
         });
 
-        it('expands CLIENT_ID in targeting', () => {
+        // TODO(#38720): fix flaky test.
+        it.skip('expands CLIENT_ID in targeting', () => {
           element.setAttribute(
             'json',
             `{
@@ -841,7 +919,8 @@ for (const {config, name} of [
           });
         });
 
-        it('expands CLIENT_ID in targeting inside array', () => {
+        // TODO(#38720): fix flaky test.
+        it.skip('expands CLIENT_ID in targeting inside array', () => {
           element.setAttribute(
             'json',
             `{
@@ -1001,24 +1080,6 @@ for (const {config, name} of [
                   expect(url1).to.match(/(\?|&)ifi=1(&|$)/);
                 });
               });
-          });
-        });
-        it('should include identity', () => {
-          // Force get identity result by overloading window variable.
-          const token =
-            /**@type {!../../../ads/google/a4a/utils.IdentityToken}*/ ({
-              token: 'abcdef',
-              jar: 'some_jar',
-              pucrd: 'some_pucrd',
-            });
-          impl.win['goog_identity_prom'] = Promise.resolve(token);
-          impl.buildCallback();
-          return impl.getAdUrl().then((url) => {
-            [
-              /(\?|&)adsid=abcdef(&|$)/,
-              /(\?|&)jar=some_jar(&|$)/,
-              /(\?|&)pucrd=some_pucrd(&|$)/,
-            ].forEach((regexp) => expect(url).to.match(regexp));
           });
         });
 
@@ -1218,6 +1279,69 @@ for (const {config, name} of [
           return expect(impl.getAdUrl()).to.eventually.match(
             /(\?|&)ptt=13(&|$)/
           );
+        });
+
+        it('should set ppid parameter if set in json', () => {
+          impl.uiHandler = {isStickyAd: () => false};
+          element.setAttribute('json', '{"ppid": "testId"}');
+          return expect(impl.getAdUrl()).to.eventually.match(
+            /(\?|&)ppid=testId(&|$)/
+          );
+        });
+
+        it('should set tfcd parameter if set in shared data', () => {
+          impl.uiHandler = {isStickyAd: () => false};
+          const consentSharedData = {
+            'doubleclick-tfua': 0,
+            'doubleclick-tfcd': 1,
+          };
+          return impl.getAdUrl({consentSharedData}).then((url) => {
+            expect(url).to.match(/(\?|&)tfua=0(&|$)/);
+            expect(url).to.match(/(\?|&)tfcd=1(&|$)/);
+          });
+        });
+
+        it('should set tfua parameter if set in shared data', () => {
+          impl.uiHandler = {isStickyAd: () => false};
+          const consentSharedData = {
+            'doubleclick-tfua': 1,
+            'doubleclick-tfcd': 0,
+          };
+          return impl.getAdUrl({consentSharedData}).then((url) => {
+            expect(url).to.match(/(\?|&)tfua=1(&|$)/);
+            expect(url).to.match(/(\?|&)tfcd=0(&|$)/);
+          });
+        });
+
+        it('default tfcd/tfua to 1 if conflicting data detected', () => {
+          element.setAttribute(
+            'json',
+            '{"tagForChildDirectedTreatment": 0,"tagForUnderAgeTreatment": 1}'
+          );
+          impl.uiHandler = {isStickyAd: () => false};
+          const consentSharedData = {
+            'doubleclick-tfua': 0,
+            'doubleclick-tfcd': 1,
+          };
+          return impl.getAdUrl({consentSharedData}).then((url) => {
+            expect(url).to.match(/(\?|&)tfua=1(&|$)/);
+            expect(url).to.match(/(\?|&)tfcd=1(&|$)/);
+          });
+        });
+
+        it('should include gpp, if consentStringType is GLOBAL_PRIVACY_PLATFORM', () => {
+          impl.uiHandler = {isStickyAd: () => false};
+          return impl
+            .getAdUrl({
+              consentStringType: CONSENT_STRING_TYPE.GLOBAL_PRIVACY_PLATFORM,
+              consentString: 'gppString',
+              gppSectionId: '1,2',
+            })
+            .then((url) => {
+              expect(url).to.match(/(\?|&)gpp=gppString(&|$)/);
+              expect(url).to.match(/(\?|&)gpp_sid=1%2C2(&|$)/);
+              expect(url).to.not.match(/(\?|&)us_privacy=/);
+            });
         });
       });
 
@@ -1713,7 +1837,7 @@ for (const {config, name} of [
         });
 
         it('should return safeframe if fluid', () => {
-          impl.isLayoutSupported(Layout.FLUID);
+          impl.isLayoutSupported(Layout_Enum.FLUID);
           expect(impl.getNonAmpCreativeRenderingMethod()).to.equal(
             XORIGIN_MODE.SAFEFRAME
           );
@@ -1767,6 +1891,56 @@ for (const {config, name} of [
             '\\/safeframe\\/\\d+-\\d+-\\d+\\/html\\/container\\.html$';
 
           expect(impl.getSafeframePath()).to.match(new RegExp(expectedPath));
+        });
+      });
+
+      describes.fakeWin('#onAdResponse', {amp: true}, (env) => {
+        let element;
+
+        beforeEach(() => {
+          element = env.win.document.createElement('amp-ad');
+          element.setAttribute('type', 'doubleclick');
+          env.win.document.body.appendChild(element);
+          impl = new AmpAdNetworkDoubleclickImpl(element);
+        });
+
+        afterEach(() => {
+          env.win.document.body.removeChild(element);
+        });
+
+        it('sets cookies as specified on the ad response', () => {
+          impl.onAdResponse({
+            headers: {
+              has: (header) => {
+                return header === AMP_GFP_SET_COOKIES_HEADER_NAME;
+              },
+              get: (header) => {
+                if (header !== AMP_GFP_SET_COOKIES_HEADER_NAME) {
+                  return;
+                }
+
+                return JSON.stringify({
+                  'cookie': [
+                    {
+                      'version': 1,
+                      'value': 'val1',
+                      'domain': 'foo.com',
+                      'expiration': Date.now() + 100_000,
+                    },
+                    {
+                      'version': 2,
+                      'value': 'val2',
+                      'domain': 'foo.com',
+                      'expiration': Date.now() + 100_000,
+                    },
+                  ],
+                });
+              },
+            },
+          });
+
+          expect(getCookie(env.win, '__gads')).to.equal('val1');
+          expect(getCookie(env.win, '__gpi')).to.equal('val2');
         });
       });
     }

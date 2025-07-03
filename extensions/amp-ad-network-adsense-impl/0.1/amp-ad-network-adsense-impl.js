@@ -5,6 +5,10 @@
 // extensions/amp-ad-network-${NETWORK_NAME}-impl directory.
 
 import {
+  handleCookieOptOutPostMessage,
+  maybeSetCookieFromAdResponse,
+} from '#ads/google/a4a/cookie-utils';
+import {
   addAmpExperimentIdToElement,
   addExperimentIdToElement,
   isInManualExperiment,
@@ -19,13 +23,11 @@ import {
   getCsiAmpAnalyticsConfig,
   getCsiAmpAnalyticsVariables,
   getEnclosingContainerTypes,
-  getIdentityToken,
   getServeNpaPromise,
   googleAdUrl,
   isCdnProxy,
   isReportingEnabled,
   maybeAppendErrorParameter,
-  maybeInsertOriginTrialToken,
 } from '#ads/google/a4a/utils';
 
 import {
@@ -42,23 +44,24 @@ import {
   getExperimentBranch,
   randomlySelectUnsetExperiments,
 } from '#experiments';
-import {StoryAdAutoAdvance} from '#experiments/story-ad-auto-advance';
-import {StoryAdPageOutlink} from '#experiments/story-ad-page-outlink';
+import {AttributionReporting} from '#experiments/attribution-reporting';
 import {StoryAdPlacements} from '#experiments/story-ad-placements';
 import {StoryAdSegmentExp} from '#experiments/story-ad-progress-segment';
 
 import {Services} from '#service';
 import {Navigation} from '#service/navigation';
 
+import {getData} from '#utils/event-helper';
+import {dev, devAssert, user} from '#utils/log';
+import {isAttributionReportingAllowed} from '#utils/privacy-sandbox-utils';
+
 import {AdsenseSharedState} from './adsense-shared-state';
 import {ResponsiveState} from './responsive-state';
 
 import {getDefaultBootstrapBaseUrl} from '../../../src/3p-frame';
-import {getData} from '../../../src/event-helper';
 import {insertAnalyticsElement} from '../../../src/extension-analytics';
-import {dev, devAssert, user} from '../../../src/log';
 import {getMode} from '../../../src/mode';
-import {AmpA4A} from '../../amp-a4a/0.1/amp-a4a';
+import {AmpA4A, tryAddingCookieParams} from '../../amp-a4a/0.1/amp-a4a';
 import {AMP_SIGNATURE_HEADER} from '../../amp-a4a/0.1/signature-verifier';
 import {getAmpAdRenderOutsideViewport} from '../../amp-ad/0.1/concurrent-load';
 
@@ -122,9 +125,6 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
     /** @private {?ResponsiveState}.  */
     this.responsiveState_ = ResponsiveState.createIfResponsive(element);
 
-    /** @private {?Promise<!../../../ads/google/a4a/utils.IdentityToken>} */
-    this.identityTokenPromise_ = null;
-
     /**
      * @private {?boolean} whether preferential rendered AMP creative, null
      * indicates no creative render.
@@ -173,12 +173,6 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
   */
   buildCallback() {
     super.buildCallback();
-    maybeInsertOriginTrialToken(this.win);
-    this.identityTokenPromise_ = this.getAmpDoc()
-      .whenFirstVisible()
-      .then(() =>
-        getIdentityToken(this.win, this.getAmpDoc(), super.getConsentPolicy())
-      );
 
     // Convert the full-width tag to container width for desktop users.
     if (
@@ -224,7 +218,19 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
    */
   divertExperiments() {
     const experimentInfoList =
-      /** @type {!Array<!../../../src/experiments.ExperimentInfo>} */ ([]);
+      /** @type {!Array<!../../../src/experiments.ExperimentInfo>} */ ([
+        {
+          experimentId: AttributionReporting.ID,
+          isTrafficEligible: () =>
+            isAttributionReportingAllowed(this.win.document),
+          branches: [
+            AttributionReporting.ENABLE,
+            AttributionReporting.DISABLE,
+            AttributionReporting.ENABLE_NO_ASYNC,
+            AttributionReporting.DISABLE_NO_ASYNC,
+          ],
+        },
+      ]);
     const setExps = randomlySelectUnsetExperiments(
       this.win,
       experimentInfoList
@@ -244,22 +250,6 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
     );
     if (storyAdPlacementsExpId) {
       addExperimentIdToElement(storyAdPlacementsExpId, this.element);
-    }
-
-    const storyAdPageOutlinkExpId = getExperimentBranch(
-      this.win,
-      StoryAdPageOutlink.ID
-    );
-    if (storyAdPageOutlinkExpId) {
-      addExperimentIdToElement(storyAdPageOutlinkExpId, this.element);
-    }
-
-    const autoAdvanceExpBranch = getExperimentBranch(
-      this.win,
-      StoryAdAutoAdvance.ID
-    );
-    if (autoAdvanceExpBranch) {
-      addExperimentIdToElement(autoAdvanceExpBranch, this.element);
     }
 
     const storyAdSegmentBranch = getExperimentBranch(
@@ -292,12 +282,16 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
     let gdprApplies = undefined;
     let additionalConsent = undefined;
     let consentStringType = undefined;
+    let consentSharedData = undefined;
+    let gppSectionId = undefined;
     if (consentTuple) {
       consentState = consentTuple.consentState;
       consentString = consentTuple.consentString;
       gdprApplies = consentTuple.gdprApplies;
       additionalConsent = consentTuple.additionalConsent;
       consentStringType = consentTuple.consentStringType;
+      consentSharedData = consentTuple.consentSharedData;
+      gppSectionId = consentTuple.gppSectionId;
     }
     if (
       consentState == CONSENT_POLICY_STATE.UNKNOWN &&
@@ -362,6 +356,7 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
       'h': sizeToSend.height,
       'ptt': 12,
       'iu': slotname,
+      'fa': {bottom: 1, top: 2}[this.element.getAttribute('sticky')],
       'npa':
         consentState == CONSENT_POLICY_STATE.INSUFFICIENT ||
         consentState == CONSENT_POLICY_STATE.UNKNOWN ||
@@ -391,10 +386,13 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
           ? this.responsiveState_.getRafmtParam()
           : null,
       'gdpr': gdprApplies === true ? '1' : gdprApplies === false ? '0' : null,
-      'gdpr_consent':
-        consentStringType != CONSENT_STRING_TYPE.US_PRIVACY_STRING
-          ? consentString
-          : null,
+      'gdpr_consent': [
+        undefined,
+        CONSENT_STRING_TYPE.TCF_V1,
+        CONSENT_STRING_TYPE.TCF_V2,
+      ].includes(consentStringType)
+        ? consentString
+        : null,
       'addtl_consent': additionalConsent,
       'us_privacy':
         consentStringType == CONSENT_STRING_TYPE.US_PRIVACY_STRING
@@ -414,29 +412,29 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
       'spsa': this.isSinglePageStoryAd
         ? `${this.size_.width}x${this.size_.height}`
         : null,
+      'tfcd': consentSharedData?.['adsense-tfcd'] ?? null,
+      'tfua': consentSharedData?.['adsense-tfua'] ?? null,
+      'gpp':
+        consentStringType == CONSENT_STRING_TYPE.GLOBAL_PRIVACY_PLATFORM
+          ? consentString
+          : null,
+      'gpp_sid':
+        consentStringType == CONSENT_STRING_TYPE.GLOBAL_PRIVACY_PLATFORM
+          ? gppSectionId
+          : null,
     };
+    tryAddingCookieParams(consentTuple, this.win, parameters);
 
     const experimentIds = [];
-    const identityPromise = Services.timerFor(this.win)
-      .timeoutPromise(1000, this.identityTokenPromise_)
-      .catch((unusedErr) => {
-        // On error/timeout, proceed.
-        return /**@type {!../../../ads/google/a4a/utils.IdentityToken}*/ ({});
-      });
-    return identityPromise.then((identity) => {
-      return googleAdUrl(
-        this,
-        ADSENSE_BASE_URL,
-        startTime,
-        {
-          'adsid': identity.token || null,
-          'jar': identity.jar || null,
-          'pucrd': identity.pucrd || null,
-          ...parameters,
-        },
-        experimentIds
-      );
-    });
+    return googleAdUrl(
+      this,
+      ADSENSE_BASE_URL,
+      startTime,
+      {
+        ...parameters,
+      },
+      experimentIds
+    );
   }
 
   /** @override */
@@ -574,6 +572,25 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
       this.element.setAttribute('data-google-query-id', this.qqid_);
     }
     dev().assertElement(this.iframe).id = `google_ads_iframe_${this.ifi_}`;
+
+    // Add listener for GPID cookie optout.
+    this.win.addEventListener('message', (event) => {
+      if (this.checkIfClearCookiePostMessageHasValidSource_(event)) {
+        handleCookieOptOutPostMessage(this.win, event);
+      }
+    });
+  }
+
+  /**
+   * Checks whether the postMessage event's source corresponds to the ad
+   * iframe. Exposed as own function to ease unit testing. (It's near
+   * impossible to simulate the postmessage coming from the creative iframe in
+   * unit test environments).
+   * @param {!Event} event
+   * @return {boolean} True if the source of the message matches the ad iframe.
+   */
+  checkIfClearCookiePostMessageHasValidSource_(event) {
+    return this.iframe && event.source == this.iframe.contentWindow;
   }
 
   /** @override */
@@ -647,6 +664,11 @@ export class AmpAdNetworkAdsenseImpl extends AmpA4A {
       return true;
     }
     return false;
+  }
+
+  /** @param {!Response} fetchResponse */
+  onAdResponse(fetchResponse) {
+    maybeSetCookieFromAdResponse(this.win, fetchResponse);
   }
 }
 

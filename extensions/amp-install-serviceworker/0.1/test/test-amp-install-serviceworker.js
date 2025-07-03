@@ -1,6 +1,7 @@
 import {Services} from '#service';
 
-import {loadPromise} from '../../../../src/event-helper';
+import {loadPromise} from '#utils/event-helper';
+
 import {
   registerServiceBuilderForDoc,
   resetServiceForTesting,
@@ -236,7 +237,7 @@ describes.realWin(
                 href: 'https://ampproject.org/',
               },
               {
-                href: 'https://ampbyexample.com/components/amp-accordion/',
+                href: 'https://amp.dev/documentation/components/amp-accordion',
               },
             ],
             createElement: () => {
@@ -260,7 +261,7 @@ describes.realWin(
                   type: 'AMP__LINK-PREFETCH',
                   payload: [
                     'https://ampproject.org/',
-                    'https://ampbyexample.com/components/amp-accordion/',
+                    'https://amp.dev/documentation/components/amp-accordion',
                   ],
                 })
               );
